@@ -62,9 +62,14 @@ log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 major_on_zero = false
-build_command = "uv build"
 commit_parser = "conventional"
 commit_message = "chore(release): {version} [skip ci]"
+# Bump pyproject, refresh the project's own version in uv.lock, then build.
+build_command = """
+uv lock --upgrade-package "$PACKAGE_NAME"
+git add uv.lock
+uv build
+"""
 
 [tool.semantic_release.branches.main]
 match = "main"
