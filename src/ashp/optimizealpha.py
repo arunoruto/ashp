@@ -17,19 +17,23 @@ except ImportError:
 
 def _testalpha(points: Union[List[Tuple[float]], np.ndarray], alpha: float):
     """
-    Evaluates an alpha parameter.
+    Evaluate an alpha value.
 
-    This helper function creates an alpha shape with the given points and alpha
-    parameter.  It then checks that the produced shape is a Polygon and that it
-    intersects all the input points.
+    Builds the alpha shape for ``points`` at ``alpha`` and checks that it is a
+    single polygon (or, in 3-D, a mesh) that intersects/contains every input
+    point.
 
-    Args:
-        points: data points
-        alpha: alpha value
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        Data points.
+    alpha : float
+        The alpha value to evaluate.
 
-    Returns:
-        bool: True if the resulting alpha shape is a single polygon that
-            intersects all the input data points.
+    Returns
+    -------
+    bool
+        ``True`` if the alpha shape is a single piece covering every point.
     """
     from .alphashape import alphashape
     polygon = alphashape(points, alpha)
@@ -55,14 +59,19 @@ def _as_point_array(points):
 
 @dataclass
 class AlphaKnee:
-    """Result of :func:`alpha_knee`.
+    """
+    Result of :func:`alpha_knee`.
 
-    Attributes:
-        radii_sorted: the Delaunay circumradii, sorted ascending (the curve).
-        knee_index: index into ``radii_sorted`` of the detected knee.
-        cut: circumradius at the knee (the cutoff; simplices above it are
-            dropped).
-        alpha: ``1 / cut`` — the selected alpha.
+    Attributes
+    ----------
+    radii_sorted : numpy.ndarray
+        The Delaunay circumradii, sorted ascending (the curve).
+    knee_index : int
+        Index into ``radii_sorted`` of the detected knee.
+    cut : float
+        Circumradius at the knee (the cutoff; simplices above it are dropped).
+    alpha : float
+        ``1 / cut`` — the selected alpha.
     """
     radii_sorted: np.ndarray
     knee_index: int
@@ -100,11 +109,19 @@ def alpha_knee(points: Union[List[Tuple[float]], np.ndarray]) -> AlphaKnee:
     particular produce; on a linear scale those outliers dominate and push the
     knee to the very end of the curve.
 
-    Args:
-        points: an iterable container of points (2-D or 3-D).
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An iterable container of 2-D or 3-D points.
 
-    Returns:
-        An :class:`AlphaKnee` with the chosen alpha and the diagnostic curve.
+    Returns
+    -------
+    AlphaKnee
+        The chosen alpha together with the diagnostic curve.
+
+    References
+    ----------
+    :cite:p:`ester1996,satopaa2011`
     """
     from .alphashape import _delaunay_circumradii
     _, _, radii = _delaunay_circumradii(_as_point_array(points))
@@ -137,13 +154,24 @@ def select_alpha(points: Union[List[Tuple[float]], np.ndarray],
       the shape starts to fragment.  Falls back to the knee when there is no
       clean structural scale.
 
-    Args:
-        points: an iterable container of points (2-D or 3-D).
-        q: fraction of simplices to keep, in ``[0, 1]`` (quantile method).
-        method: ``"quantile"``, ``"knee"`` or ``"band"``.
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An iterable container of 2-D or 3-D points.
+    q : float, default 0.9
+        Fraction of simplices to keep, in ``[0, 1]`` (quantile method only).
+    method : {"quantile", "knee", "band"}, default "quantile"
+        The selection strategy.
 
-    Returns:
-        float: an alpha value, or ``0.0`` (convex hull) if it cannot be found.
+    Returns
+    -------
+    float
+        An alpha value, or ``0.0`` (the convex hull) if it cannot be found.
+
+    See Also
+    --------
+    alpha_knee : the knee diagnostic behind ``method="knee"``.
+    alpha_band : the band diagnostic behind ``method="band"``.
     """
     if method == "knee":
         return alpha_knee(points).alpha
@@ -179,29 +207,37 @@ def optimizealpha(points: Union[List[Tuple[float]], np.ndarray],
     Attempt to determine the alpha parameter that best wraps the given set of
     points in one polygon without dropping any points.
 
-    Note:  If the solver fails to find a solution, a value of zero will be
-    returned, which when used with the alphashape function will safely return a
-    convex hull around the points.
+    Bisects on alpha, keeping the largest value for which the alpha shape is a
+    single polygon covering every point. If no solution is found, ``0.0`` is
+    returned, which :func:`alphashape` interprets as the convex hull.
 
-    Args:
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An iterable container of points.
+    max_iterations : int, default 10000
+        Maximum number of bisection iterations.
+    lower : float, default 0.0
+        Lower bound of the search.
+    upper : float, optional
+        Upper bound of the search (defaults to the largest representable float).
+    silent : bool, default False
+        Silence convergence warnings.
+    rel_tol : float, default 1e-6
+        Relative tolerance for the bisection. The search stops once the bracket
+        width drops below ``rel_tol`` times the current upper bound. A purely
+        absolute tolerance would be finer than the floating-point resolution for
+        any alpha above ~1, making the bisection run until ``max_iterations``
+        for every realistic input.
 
-        points: an iterable container of points
-        max_iterations (int): maximum number of iterations while finding the
-            solution
-        lower: lower limit for optimization
-        upper: upper limit for optimization
-        silent: silence warnings
-        rel_tol: relative tolerance for the bisection.  The search stops once
-            the bracket width is below ``rel_tol`` times the current upper
-            bound.  A purely absolute tolerance would be finer than the
-            floating-point resolution for any alpha above ~1, which would make
-            the bisection run until ``max_iterations`` for every realistic
-            input.
+    Returns
+    -------
+    float
+        The optimized alpha value.
 
-    Returns:
-
-        float: The optimized alpha parameter
-
+    See Also
+    --------
+    select_alpha : a faster, density-robust alternative.
     """
     # Convert to a shapely multipoint object if not one already
     if USE_GP and isinstance(points, geopandas.GeoDataFrame):

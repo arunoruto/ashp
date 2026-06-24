@@ -71,15 +71,25 @@ def cluster(points: Union[List[Tuple[float]], np.ndarray],
     circumradius is below ``1 / alpha`` (i.e. through the alpha shape at that
     scale).  Components smaller than ``min_size`` are treated as noise.
 
-    Args:
-        points: an iterable container of points (2-D or 3-D).
-        alpha: alpha value.  If ``None``, the most persistent scale found by
-            :func:`cluster_persistence` is used.
-        min_size: components with fewer points than this are labelled noise.
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An iterable container of 2-D or 3-D points.
+    alpha : float, optional
+        The alpha value. If ``None`` (the default), the most persistent scale
+        found by :func:`cluster_persistence` is used.
+    min_size : int, default 2
+        Components with fewer points than this are labelled noise.
 
-    Returns:
+    Returns
+    -------
+    numpy.ndarray
         An integer label per point: clusters are ``0, 1, 2, ...`` ordered by
         descending size, and noise points are ``-1``.
+
+    References
+    ----------
+    :cite:p:`ester1996`
     """
     coords, simplices, radii = _delaunay_circumradii(points)
     n = coords.shape[0]
@@ -111,14 +121,20 @@ def cluster(points: Union[List[Tuple[float]], np.ndarray],
 
 @dataclass
 class ClusterPersistence:
-    """Result of :func:`cluster_persistence`.
+    """
+    Result of :func:`cluster_persistence`.
 
-    Attributes:
-        alpha: ascending alpha values (the filtration scale).
-        n_clusters: number of clusters (size >= ``min_size``) at each alpha; a
-            step function, the value holding until the next alpha.
-        best_alpha: alpha at the centre of the most persistent plateau.
-        best_k: number of clusters on that plateau.
+    Attributes
+    ----------
+    alpha : numpy.ndarray
+        Ascending alpha values (the filtration scale).
+    n_clusters : numpy.ndarray
+        Number of clusters (size >= ``min_size``) at each alpha; a step
+        function, the value holding until the next alpha.
+    best_alpha : float
+        Alpha at the centre of the most persistent plateau.
+    best_k : int
+        Number of clusters on that plateau.
     """
     alpha: np.ndarray
     n_clusters: np.ndarray
@@ -136,12 +152,17 @@ def cluster_persistence(points: Union[List[Tuple[float]], np.ndarray],
     plateau measured in ``alpha`` (the natural "lambda" scale, as in HDBSCAN's
     stability) is the most robust clustering.  ``best_alpha`` sits at its centre.
 
-    Args:
-        points: an iterable container of points (2-D or 3-D).
-        min_size: minimum size for a component to count as a cluster.
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An iterable container of 2-D or 3-D points.
+    min_size : int, default 2
+        Minimum size for a component to count as a cluster.
 
-    Returns:
-        A :class:`ClusterPersistence` with the curve and the suggested scale.
+    Returns
+    -------
+    ClusterPersistence
+        The cluster-count curve and the suggested scale.
     """
     coords, simplices, radii = _delaunay_circumradii(points)
     n = coords.shape[0]
@@ -195,15 +216,22 @@ def cluster_persistence(points: Union[List[Tuple[float]], np.ndarray],
 
 @dataclass
 class AlphaSweep:
-    """Result of :func:`alpha_sweep` (all arrays aligned and ascending in alpha).
+    """
+    Result of :func:`alpha_sweep` (all arrays aligned and ascending in alpha).
 
-    Attributes:
-        alpha: the sweep of alpha values (``1 / radius`` threshold).
-        edge_std: standard deviation of the kept Delaunay edge lengths.
-        edge_cv: their coefficient of variation (``std / mean``) — dimensionless,
-            so it is comparable across point counts and scales.
-        n_components: number of connected components of the kept edges.
-        n_edges: number of kept edges.
+    Attributes
+    ----------
+    alpha : numpy.ndarray
+        The sweep of alpha values (``1 / radius`` threshold).
+    edge_std : numpy.ndarray
+        Standard deviation of the kept Delaunay edge lengths.
+    edge_cv : numpy.ndarray
+        Their coefficient of variation (``std / mean``) — dimensionless, so it
+        is comparable across point counts and scales.
+    n_components : numpy.ndarray
+        Number of connected components of the kept edges.
+    n_edges : numpy.ndarray
+        Number of kept edges.
     """
     alpha: np.ndarray
     edge_std: np.ndarray
@@ -224,12 +252,17 @@ def alpha_sweep(points: Union[List[Tuple[float]], np.ndarray],
     incremental union-find pass (for connectivity), with no per-alpha alpha-shape
     recomputation.
 
-    Args:
-        points: an iterable container of points (2-D or 3-D).
-        n_steps: number of alpha samples.
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An iterable container of 2-D or 3-D points.
+    n_steps : int, default 80
+        Number of alpha samples.
 
-    Returns:
-        An :class:`AlphaSweep` with the metrics as functions of alpha.
+    Returns
+    -------
+    AlphaSweep
+        The metrics as functions of alpha.
     """
     coords, simplices, radii = _delaunay_circumradii(points)
     n = coords.shape[0]
@@ -314,8 +347,20 @@ def usable_band(sweep: AlphaSweep):
     the upper one there is no clean structural scale (e.g. a featureless uniform
     cloud) and ``None`` is returned.
 
-    Returns:
-        ``(lo, hi, centre)`` with ``centre`` the geometric mean, or ``None``.
+    Parameters
+    ----------
+    sweep : AlphaSweep
+        The metrics from :func:`alpha_sweep`.
+
+    Returns
+    -------
+    tuple of (float, float, float) or None
+        ``(lo, hi, centre)`` with ``centre`` the geometric mean of the band, or
+        ``None`` when there is no clean structural scale.
+
+    References
+    ----------
+    :cite:p:`satopaa2011`
     """
     rate = homogenisation_rate(sweep)
     if rate.size == 0:

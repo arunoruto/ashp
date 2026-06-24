@@ -129,7 +129,10 @@ Or work on the project itself:
 git clone https://github.com/arunoruto/ashp.git
 cd ashp
 uv sync                # project + test group
-uv run pytest          # 13 tests
+uv run pytest          # run the test suite
+
+# Build the documentation (Sphinx + autoapi, with cited references):
+uv run --group docs sphinx-build -b html docs/source docs/build/html
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

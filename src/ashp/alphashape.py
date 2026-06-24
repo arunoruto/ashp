@@ -44,12 +44,16 @@ def _circumradius_simplex(points: np.ndarray) -> float:
     """
     Circumradius of a single simplex.
 
-    Args:
-      points: An `N`x`K` array defining one (`N`-1) simplex.
+    Parameters
+    ----------
+    points : numpy.ndarray
+        An ``N``-by-``K`` array defining one ``(N-1)``-simplex.
 
-    Returns:
-      The circumradius, or ``inf`` for a degenerate (singular) simplex so that
-      it is harmlessly filtered out downstream.
+    Returns
+    -------
+    float
+        The circumradius, or ``inf`` for a degenerate (singular) simplex so
+        that it is harmlessly filtered out downstream.
     """
     n = points.shape[0]
     gram = points @ points.T
@@ -103,15 +107,22 @@ def _circumradii(coords: np.ndarray, simplices: np.ndarray) -> np.ndarray:
 
 def circumcenter(points: Union[List[Tuple[float]], np.ndarray]) -> np.ndarray:
     """
-    Calculate the circumcenter of a set of points in barycentric coordinates.
+    Circumcenter of a set of points, in barycentric coordinates.
 
-    Args:
-      points: An `N`x`K` array of points which define an (`N`-1) simplex in K
-        dimensional space.  `N` and `K` must satisfy 1 <= `N` <= `K` and
-        `K` >= 1.
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An ``N``-by-``K`` array of points defining an ``(N-1)``-simplex in
+        ``K``-dimensional space, with ``1 <= N <= K`` and ``K >= 1``.
 
-    Returns:
-      The circumcenter of a set of points in barycentric coordinates.
+    Returns
+    -------
+    numpy.ndarray
+        The circumcenter of the points, in barycentric coordinates.
+
+    References
+    ----------
+    :cite:p:`edelsbrunner1983`
     """
     points = np.asarray(points, dtype=np.float64)
     num_rows, num_columns = points.shape
@@ -125,15 +136,22 @@ def circumcenter(points: Union[List[Tuple[float]], np.ndarray]) -> np.ndarray:
 
 def circumradius(points: Union[List[Tuple[float]], np.ndarray]) -> float:
     """
-    Calculte the circumradius of a given set of points.
+    Circumradius of a set of points.
 
-    Args:
-      points: An `N`x`K` array of points which define an (`N`-1) simplex in K
-        dimensional space.  `N` and `K` must satisfy 1 <= `N` <= `K` and
-        `K` >= 1.
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An ``N``-by-``K`` array of points defining an ``(N-1)``-simplex in
+        ``K``-dimensional space, with ``1 <= N <= K`` and ``K >= 1``.
 
-    Returns:
-      The circumradius of a given set of points.
+    Returns
+    -------
+    float
+        The circumradius of the points.
+
+    References
+    ----------
+    :cite:p:`edelsbrunner1983`
     """
     points = np.asarray(points)
     return np.linalg.norm(points[0, :] - np.dot(circumcenter(points), points))
@@ -153,14 +171,18 @@ def _delaunay_circumradii(points: Union[List[Tuple[float]], np.ndarray]):
 def alphasimplices(points: Union[List[Tuple[float]], np.ndarray]) -> \
         Union[List[Tuple[float]], np.ndarray]:
     """
-    Returns an iterator of simplices and their circumradii of the given set of
-    points.
+    Iterate over the Delaunay simplices and their circumradii.
 
-    Args:
-      points: An `N`x`M` array of points.
+    Parameters
+    ----------
+    points : list of tuple of float or numpy.ndarray
+        An ``N``-by-``M`` array of points.
 
-    Yields:
-      A simplex, and its circumradius as a tuple.
+    Yields
+    ------
+    tuple of (numpy.ndarray, float)
+        Each simplex (as an array of vertex indices) paired with its
+        circumradius.
     """
     _, simplices, radii = _delaunay_circumradii(points)
     for simplex, radius in zip(simplices, radii):
@@ -181,8 +203,20 @@ def _perimeter_facets(simplices: np.ndarray, radii: np.ndarray,
     Each returned facet keeps the vertex order of its originating simplex, so
     the output is identical (not just equivalent) to the previous loop.
 
-    Returns:
-      An ``(B, dim)`` array of boundary-facet vertex indices.
+    Parameters
+    ----------
+    simplices : numpy.ndarray
+        The Delaunay simplices, an ``M``-by-``(dim+1)`` array of vertex indices.
+    radii : numpy.ndarray
+        The circumradius of each simplex.
+    alpha : float or callable
+        The alpha value, or a callable ``alpha(simplex, circumradius)`` giving a
+        per-simplex value.
+
+    Returns
+    -------
+    numpy.ndarray
+        A ``(B, dim)`` array of boundary-facet vertex indices.
     """
     dim = simplices.shape[1] - 1
 
@@ -214,22 +248,40 @@ def _perimeter_facets(simplices: np.ndarray, radii: np.ndarray,
 def alphashape(points: Union[List[Tuple[float]], np.ndarray],
                alpha: Union[None, float] = None):
     """
-    Compute the alpha shape (concave hull) of a set of points.  If the number
-    of points in the input is three or less, the convex hull is returned to the
-    user.  For two points, the convex hull collapses to a `LineString`; for one
-    point, a `Point`.
+    Compute the alpha shape (concave hull) of a set of points.
 
-    Args:
+    Delaunay-triangulate the points and keep the simplices whose circumradius is
+    below ``1 / alpha``; the boundary of the kept simplices is the alpha shape
+    :cite:p:`edelsbrunner1983,edelsbrunner1994`. With three points or fewer, or
+    ``alpha <= 0``, the convex hull is returned (a ``Polygon``, or a
+    ``LineString`` for two points / a ``Point`` for one).
 
-      points (list or ``shapely.geometry.MultiPoint`` or \
-          ``geopandas.GeoDataFrame``): an iterable container of points
-      alpha (float): alpha value
+    Parameters
+    ----------
+    points : list of tuple of float, numpy.ndarray, shapely.geometry.MultiPoint or geopandas.GeoDataFrame
+        An iterable container of 2-D or 3-D points.
+    alpha : float or callable, optional
+        The alpha value. ``0`` (or less) returns the convex hull; larger values
+        give a tighter shape. A callable ``alpha(simplex, circumradius)`` may be
+        passed for a per-simplex value. If ``None`` (the default), it is solved
+        for with :func:`optimizealpha`.
 
-    Returns:
+    Returns
+    -------
+    shapely.geometry.base.BaseGeometry or trimesh.Trimesh or geopandas.GeoDataFrame
+        For 2-D input, a shapely ``Polygon`` / ``LineString`` / ``Point`` (or a
+        ``GeoDataFrame`` if one was given); for 3-D input, a
+        ``trimesh.Trimesh`` surface mesh; for higher dimensions, the set of
+        boundary-facet index tuples.
 
-      ``shapely.geometry.Polygon`` or ``shapely.geometry.LineString`` or
-      ``shapely.geometry.Point`` or ``geopandas.GeoDataFrame``: \
-          the resulting geometry
+    See Also
+    --------
+    select_alpha : fast, data-driven alpha from the circumradius distribution.
+    optimizealpha : solve for the tightest alpha that covers every point.
+
+    References
+    ----------
+    :cite:p:`edelsbrunner1983,edelsbrunner1994`
     """
     # If given a geodataframe, extract the geometry
     if USE_GP and isinstance(points, geopandas.GeoDataFrame):
