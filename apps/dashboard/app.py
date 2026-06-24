@@ -22,8 +22,10 @@ for _p in (_HERE, _HERE.parents[1] / "src"):
 
 import numpy as np  # noqa: E402
 
-from ashp import alphashape, optimizealpha, select_alpha  # noqa: E402
-from plotting import make_figure, make_figure_3d, sample_points  # noqa: E402
+from ashp import (alphashape, cluster, cluster_persistence,  # noqa: E402
+                  optimizealpha, select_alpha)
+from plotting import (cluster_figure, make_figure, make_figure_3d,  # noqa: E402
+                      persistence_figure, sample_points)
 
 DATASETS_2D = ["two moons", "spiral", "annulus", "uniform"]
 DATASETS_3D = ["ball (3D)", "torus (3D)", "blobs (3D)"]
@@ -85,36 +87,73 @@ def compute(dataset: str, n: int, seed: int, mode: str, alpha: float, q: float):
     return points, ("2d", alphashape(points, used)), used
 
 
-start = time.perf_counter()
-spinner = ("Optimizing alpha…" if mode == "Optimize (cover all)"
-           else "Computing alpha shape…")
-with st.spinner(spinner):
-    points, payload, used_alpha = compute(
-        dataset, n, int(seed), mode, alpha_input, q_input)
-elapsed = time.perf_counter() - start
+@st.cache_data(show_spinner=False)
+def cluster_data(dataset: str, n: int, seed: int, min_size: int):
+    """Cluster the sampled points and the persistence curve, cached together."""
+    points = sample_points(dataset, n, seed)
+    cp = cluster_persistence(points, min_size=min_size)
+    labels = cluster(points, cp.best_alpha, min_size=min_size)
+    return points, labels, cp.best_alpha, cp.best_k, cp.alpha, cp.n_clusters
 
-if payload[0] == "3d":
-    _, vertices, faces = payload
-    st.plotly_chart(make_figure_3d(points, vertices, faces), width="stretch")
-else:
-    _, geom = payload
-    st.plotly_chart(make_figure(points, geom), width="stretch")
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Points", len(points))
-c2.metric("Alpha used", f"{used_alpha:.2f}")
-if payload[0] == "3d":
-    c3.metric("Faces", len(faces))
-    c4.metric("Compute", f"{elapsed * 1e3:.0f} ms")
-    if len(faces) == 0:
-        st.info("No surface at this alpha — it is too high. Lower the slider.")
-else:
-    c3.metric("Geometry", geom.geom_type)
-    c4.metric("Compute", f"{elapsed * 1e3:.0f} ms")
-    st.caption(f"Resulting area: {getattr(geom, 'area', 0.0):.3f}")
-    if mode == "Optimize (cover all)" and used_alpha == 0.0:
-        st.info(
-            "The optimizer returned alpha = 0 (convex hull). That happens when "
-            "no single alpha wraps every point into one polygon — common for "
-            "uniform clouds. Try the *Quantile* mode, or the *two moons* / "
-            "*spiral* datasets.")
+tab_shape, tab_cluster = st.tabs(["Alpha shape", "Clustering"])
+
+with tab_shape:
+    start = time.perf_counter()
+    spinner = ("Optimizing alpha…" if mode == "Optimize (cover all)"
+               else "Computing alpha shape…")
+    with st.spinner(spinner):
+        points, payload, used_alpha = compute(
+            dataset, n, int(seed), mode, alpha_input, q_input)
+    elapsed = time.perf_counter() - start
+
+    if payload[0] == "3d":
+        _, vertices, faces = payload
+        st.plotly_chart(make_figure_3d(points, vertices, faces),
+                        width="stretch")
+    else:
+        _, geom = payload
+        st.plotly_chart(make_figure(points, geom), width="stretch")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Points", len(points))
+    c2.metric("Alpha used", f"{used_alpha:.2f}")
+    if payload[0] == "3d":
+        c3.metric("Faces", len(faces))
+        c4.metric("Compute", f"{elapsed * 1e3:.0f} ms")
+        if len(faces) == 0:
+            st.info("No surface at this alpha — it is too high. Lower the "
+                    "slider.")
+    else:
+        c3.metric("Geometry", geom.geom_type)
+        c4.metric("Compute", f"{elapsed * 1e3:.0f} ms")
+        st.caption(f"Resulting area: {getattr(geom, 'area', 0.0):.3f}")
+        if mode == "Optimize (cover all)" and used_alpha == 0.0:
+            st.info(
+                "The optimizer returned alpha = 0 (convex hull). That happens "
+                "when no single alpha wraps every point into one polygon — "
+                "common for uniform clouds. Try the *Quantile* mode, or the "
+                "*two moons* / *spiral* datasets.")
+
+with tab_cluster:
+    st.caption(
+        "Clusters are the connected components of the alpha complex. The "
+        "persistence curve picks the most stable scale automatically — read it "
+        "like a k-means elbow plot.")
+    min_size = st.slider("Minimum cluster size", 2, 60, 10,
+                         help="Components smaller than this are treated as "
+                              "noise (grey).")
+    points_c, labels, best_alpha, best_k, curve_a, curve_k = cluster_data(
+        dataset, n, int(seed), min_size)
+
+    left, right = st.columns(2)
+    left.plotly_chart(
+        persistence_figure(curve_a, curve_k, best_alpha, best_k),
+        width="stretch")
+    right.plotly_chart(cluster_figure(points_c, labels), width="stretch")
+
+    found = len(set(labels[labels >= 0].tolist()))
+    d1, d2, d3 = st.columns(3)
+    d1.metric("Suggested k", best_k)
+    d2.metric("Clusters shown", found)
+    d3.metric("Noise points", int((labels == -1).sum()))

@@ -28,6 +28,11 @@ blobs) — set the number of points, and choose how alpha is selected:
 
 3-D datasets render the alpha-shape surface mesh with Plotly.
 
+The **Clustering** tab treats the connected components of the alpha complex as
+clusters (the single-linkage / DBSCAN-like view) and shows a persistence curve —
+cluster count vs alpha — with the most stable scale picked automatically, read
+like a k-means elbow plot. Points are coloured by cluster (noise in grey).
+
 ## Files
 
 | File | Purpose |
