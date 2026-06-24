@@ -158,13 +158,14 @@ def candidate_alphas(dataset: str, n: int, seed: int):
 
 st.subheader("Metrics vs alpha")
 st.caption(
-    "The Delaunay graph is fixed — alpha only drops edges. As alpha rises the "
-    "spread (std / **CV**) of the kept edge lengths falls as the long bridges "
-    "are removed, and the **components** count rises as the shape fragments. "
-    "The middle panel, **−d(CV)/d(log α)**, is the sensitive one: its peak marks "
-    "the blob→structure transition and barely moves with point count. Vertical "
-    "lines mark the alpha in use and what the *knee* / *persistence* selectors "
-    "would choose.")
+    "The Delaunay graph is fixed — alpha only drops edges. Read it as two "
+    "bounds: the **−d(CV)/d(log α)** peak (middle) is where the long bridges get "
+    "cut — too loose below it (a blob); the point where **components** starts "
+    "climbing (bottom) is where the shape begins to fragment — too tight above "
+    "it. The **green band** between them is the usable range, and its centre "
+    "(green dashed) is a reasonable pick. If the band is absent there is no "
+    "clean structural scale (e.g. a uniform cloud). Other lines: the alpha in "
+    "use, and what the *knee* / *persistence* selectors would choose.")
 knee_a, pers_a = candidate_alphas(dataset, n, int(seed))
 markers = [(used_alpha, "in use", "#d62728"),
            (knee_a, "knee", "#7f7f7f"),

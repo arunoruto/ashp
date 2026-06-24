@@ -237,6 +237,35 @@ def homogenisation_rate(sweep) -> np.ndarray:
     return np.convolve(rate, np.ones(3) / 3.0, mode="same")  # light smoothing
 
 
+def _rise_knee(values: np.ndarray, alpha: np.ndarray) -> float:
+    """Alpha where a flat-then-rising curve starts climbing (Kneedle)."""
+    if alpha.size < 3:
+        return float(alpha[-1]) if alpha.size else 0.0
+    y = np.log(np.maximum(values, 1.0))
+    la = np.log(alpha)
+    x = (la - la[0]) / (la[-1] - la[0])
+    yy = (y - y[0]) / (y[-1] - y[0] + 1e-12)
+    return float(alpha[int(np.argmax(x - yy))])
+
+
+def usable_band(sweep):
+    """The alpha range worth picking from, or ``None`` if there isn't one.
+
+    Lower edge: the homogenisation-rate peak (the long bridges have been cut).
+    Upper edge: where the component count starts climbing (the shape begins to
+    fragment).  When the lower edge is above the upper one there is no clean
+    structural scale (e.g. a featureless uniform cloud), so ``None`` is returned.
+    """
+    rate = homogenisation_rate(sweep)
+    if rate.size == 0:
+        return None
+    lo = float(sweep.alpha[int(np.argmax(rate))])
+    hi = _rise_knee(sweep.n_components, sweep.alpha)
+    if lo >= hi:
+        return None
+    return lo, hi, float(np.sqrt(lo * hi))
+
+
 def sweep_figure(sweep, markers=()) -> go.Figure:
     """
     Three stacked panels vs alpha (``sweep`` is an :class:`ashp.AlphaSweep`):
@@ -274,6 +303,21 @@ def sweep_figure(sweep, markers=()) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=sweep.alpha, y=sweep.n_components, name="# components",
         line=dict(color="#2ca02c", width=2)), row=3, col=1)
+
+    # Shade the usable band (bridges cut -> not yet fragmenting) and mark its
+    # centre as a suggested alpha.  Absent when there is no clean scale.
+    band = usable_band(sweep)
+    if band is not None:
+        lo, hi, centre = band
+        for r in (1, 2, 3):
+            fig.add_vrect(x0=lo, x1=hi, fillcolor="rgba(44,160,44,0.10)",
+                          line_width=0, row=r, col=1)
+            fig.add_vline(x=centre, line=dict(color="#2ca02c", dash="dash",
+                                              width=1.5), row=r, col=1)
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="lines", name=f"usable band (≈{centre:.1f})",
+            line=dict(color="#2ca02c", dash="dash", width=1.5)),
+            row=1, col=1, secondary_y=False)
 
     # Markers as plain vertical lines (no annotations — those break the
     # autorange) plus a legend entry each.  Only those inside the sweep range
