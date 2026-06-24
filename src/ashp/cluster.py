@@ -1,0 +1,190 @@
+"""
+Clustering from the Delaunay alpha filtration.
+
+Building an alpha shape at radius ``r = 1/alpha`` keeps the simplices whose
+circumradius is below ``r``; the connected components of those simplices form a
+clustering (the single-linkage / DBSCAN-like view of the alpha complex).  As
+``alpha`` sweeps from 0 to infinity the components split from one (the convex
+hull) down to isolated points, and :func:`cluster_persistence` records that
+sweep so a stable scale can be read off like a k-means elbow plot.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Tuple, Union
+
+import numpy as np
+
+from .alphashape import _delaunay_circumradii
+
+__all__ = ['cluster', 'cluster_persistence', 'ClusterPersistence']
+
+
+class _UnionFind:
+    """Union-find with union-by-size and path halving."""
+
+    def __init__(self, n: int):
+        self.parent = np.arange(n)
+        self.size = np.ones(n, dtype=np.int64)
+
+    def find(self, x: int) -> int:
+        parent = self.parent
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return int(x)
+
+    def union(self, a: int, b: int, min_size: int) -> int:
+        """Merge ``a`` and ``b``; return the change in the number of components
+        whose size is at least ``min_size``."""
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return 0
+        a_big = self.size[ra] >= min_size
+        b_big = self.size[rb] >= min_size
+        if self.size[ra] < self.size[rb]:
+            ra, rb = rb, ra
+        self.parent[rb] = ra
+        self.size[ra] += self.size[rb]
+        new_big = self.size[ra] >= min_size
+        return int(new_big) - int(a_big) - int(b_big)
+
+
+def _connectivity(simplices: np.ndarray, radii: np.ndarray):
+    """Drop non-finite circumradii and sort simplices by circumradius."""
+    finite = np.isfinite(radii)
+    simplices, radii = simplices[finite], radii[finite]
+    order = np.argsort(radii, kind="mergesort")
+    return simplices[order], radii[order]
+
+
+def cluster(points: Union[List[Tuple[float]], np.ndarray],
+            alpha: Union[None, float] = None,
+            min_size: int = 2) -> np.ndarray:
+    """
+    Cluster points by the connected components of the alpha complex.
+
+    Two points share a cluster when they are joined through simplices whose
+    circumradius is below ``1 / alpha`` (i.e. through the alpha shape at that
+    scale).  Components smaller than ``min_size`` are treated as noise.
+
+    Args:
+        points: an iterable container of points (2-D or 3-D).
+        alpha: alpha value.  If ``None``, the most persistent scale found by
+            :func:`cluster_persistence` is used.
+        min_size: components with fewer points than this are labelled noise.
+
+    Returns:
+        An integer label per point: clusters are ``0, 1, 2, ...`` ordered by
+        descending size, and noise points are ``-1``.
+    """
+    coords, simplices, radii = _delaunay_circumradii(points)
+    n = coords.shape[0]
+
+    if alpha is None:
+        alpha = cluster_persistence(points, min_size=min_size).best_alpha
+
+    threshold = np.inf if alpha <= 0 else 1.0 / alpha
+    keep = simplices[radii < threshold]
+
+    uf = _UnionFind(n)
+    for simplex in keep:
+        first = int(simplex[0])
+        for v in simplex[1:]:
+            uf.union(first, int(v), min_size)
+
+    roots = np.array([uf.find(i) for i in range(n)])
+    uniq, counts = np.unique(roots, return_counts=True)
+    size_of = dict(zip(uniq.tolist(), counts.tolist()))
+    big_roots = sorted((r for r in uniq.tolist() if size_of[r] >= min_size),
+                       key=lambda r: -size_of[r])
+    remap = {r: i for i, r in enumerate(big_roots)}
+
+    labels = np.full(n, -1, dtype=np.int64)
+    for i in range(n):
+        labels[i] = remap.get(int(roots[i]), -1)
+    return labels
+
+
+@dataclass
+class ClusterPersistence:
+    """Result of :func:`cluster_persistence`.
+
+    Attributes:
+        alpha: ascending alpha values (the filtration scale).
+        n_clusters: number of clusters (size >= ``min_size``) at each alpha; a
+            step function, the value holding until the next alpha.
+        best_alpha: alpha at the centre of the most persistent plateau.
+        best_k: number of clusters on that plateau.
+    """
+    alpha: np.ndarray
+    n_clusters: np.ndarray
+    best_alpha: float
+    best_k: int
+
+
+def cluster_persistence(points: Union[List[Tuple[float]], np.ndarray],
+                        min_size: int = 2) -> ClusterPersistence:
+    """
+    Sweep the alpha filtration and record how many clusters survive at each
+    scale, then pick the most persistent one.
+
+    The component count is constant over ranges of alpha (plateaus); the widest
+    plateau measured in ``alpha`` (the natural "lambda" scale, as in HDBSCAN's
+    stability) is the most robust clustering.  ``best_alpha`` sits at its centre.
+
+    Args:
+        points: an iterable container of points (2-D or 3-D).
+        min_size: minimum size for a component to count as a cluster.
+
+    Returns:
+        A :class:`ClusterPersistence` with the curve and the suggested scale.
+    """
+    coords, simplices, radii = _delaunay_circumradii(points)
+    n = coords.shape[0]
+    simplices, radii = _connectivity(simplices, radii)
+
+    uf = _UnionFind(int(n))
+    big = n if min_size <= 1 else 0
+    # Step function as (radius, k) change points; start before any simplex.
+    r_change: List[float] = [0.0]
+    k_change: List[int] = [int(big)]
+
+    for simplex, r in zip(simplices, radii):
+        first = int(simplex[0])
+        for v in simplex[1:]:
+            big += uf.union(first, int(v), min_size)
+        if big != k_change[-1]:
+            r_change.append(float(r))
+            k_change.append(int(big))
+
+    r_arr = np.asarray(r_change)
+    k_arr = np.asarray(k_change)
+
+    # Widest plateau among segments with >= 2 clusters, measured in log-radius
+    # so the metric is scale-invariant (measuring in alpha = 1/r would bias the
+    # choice toward the noisy small-radius / high-alpha fragmentation regime).
+    r_max = float(radii.max()) if radii.size else 1.0
+    best = None  # (persistence, k, r_lo, r_hi)
+    for i in range(len(r_arr)):
+        k = int(k_arr[i])
+        r_lo = float(r_arr[i])
+        if k < 2 or r_lo <= 0.0:
+            continue
+        r_hi = float(r_arr[i + 1]) if i + 1 < len(r_arr) else r_max
+        persistence = np.log(r_hi) - np.log(r_lo)
+        if best is None or persistence > best[0]:
+            best = (persistence, k, r_lo, r_hi)
+
+    if best is None:
+        best_k, best_alpha = 1, 0.0
+    else:
+        _, best_k, r_lo, r_hi = best
+        best_alpha = 1.0 / np.sqrt(r_lo * r_hi)  # geometric centre of plateau
+
+    # Return the curve as ascending alpha (drop the r = 0 start point).
+    positive = r_arr > 0.0
+    alpha_curve = (1.0 / r_arr[positive])[::-1]
+    k_curve = k_arr[positive][::-1]
+    return ClusterPersistence(alpha=alpha_curve, n_clusters=k_curve,
+                              best_alpha=best_alpha, best_k=int(best_k))
