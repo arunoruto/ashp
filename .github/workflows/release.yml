@@ -15,17 +15,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-      - name: Sync (project + test group)
-        run: uv sync
-      - name: Run tests
-        run: uv run pytest -q
+    uses: ./.github/workflows/test.yml   # tests gate the release
 
   release:
     needs: test

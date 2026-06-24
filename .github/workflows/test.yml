@@ -1,0 +1,27 @@
+name: Test
+
+# Runs the test suite. Triggered on pull requests, and exposed as a reusable
+# workflow (workflow_call) so the release workflow requires it as a prerequisite
+# instead of duplicating the steps.
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Sync (project + test group)
+        run: uv sync
+      - name: Run tests
+        run: uv run pytest -q
