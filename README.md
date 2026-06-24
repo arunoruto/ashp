@@ -82,6 +82,10 @@ original API while adding:
   <img src="assets/img/spiral.png" width="45%" alt="Spiral alpha shape">
 </p>
 
+It also works in 3-D, returning a surface mesh:
+
+![3-D alpha-shape surface meshes](assets/img/gallery_3d.png)
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Built With

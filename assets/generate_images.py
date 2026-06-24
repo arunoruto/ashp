@@ -19,13 +19,24 @@ for _p in (_ROOT / "apps" / "dashboard", _ROOT / "src"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
+import matplotlib  # noqa: E402
+matplotlib.use("Agg")  # headless, software 3-D rendering (no WebGL needed)
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection  # noqa: E402
 from plotly.subplots import make_subplots  # noqa: E402
 
 from ashp import alphashape  # noqa: E402
-from plotting import (geom_traces, make_figure, point_trace,  # noqa: E402
-                      sample_points, style_axes)
+from plotting import (POINT_COLOR, SHAPE_LINE, geom_traces,  # noqa: E402
+                      make_figure, point_trace, sample_points, style_axes)
 
 SCALE = 2  # render at 2x for crisp images
+
+
+def _rgb(css: str):
+    """Convert a ``"rgb(r, g, b)"`` string to a matplotlib RGB tuple."""
+    r, g, b = (int(v) for v in css[css.index("(") + 1:css.index(")")].split(","))
+    return (r / 255, g / 255, b / 255)
 
 
 def alpha_sweep(out: Path) -> None:
@@ -58,6 +69,35 @@ def single(out: Path, dataset: str, alpha: float, name: str) -> None:
     fig.write_image(str(out / name), width=520, height=520, scale=SCALE)
 
 
+def gallery_3d(out: Path) -> None:
+    """A 1x3 panel of 3-D alpha-shape surface meshes (rendered with matplotlib,
+    since Plotly's WebGL meshes cannot be exported headless)."""
+    datasets = [("ball (3D)", 6.0), ("torus (3D)", 6.0), ("blobs (3D)", 7.0)]
+    face_rgb, point_rgb = _rgb(SHAPE_LINE), _rgb(POINT_COLOR)
+
+    fig = plt.figure(figsize=(12, 4.3))
+    for i, (dataset, alpha) in enumerate(datasets, start=1):
+        points = sample_points(dataset, 600, seed=1)
+        mesh = alphashape(points, alpha)
+        v = np.asarray(mesh.vertices)
+        f = np.asarray(mesh.faces)
+
+        ax = fig.add_subplot(1, 3, i, projection="3d")
+        tris = Poly3DCollection(v[f], alpha=0.45, facecolor=face_rgb,
+                                edgecolor=face_rgb, linewidths=0.1)
+        ax.add_collection3d(tris)
+        ax.scatter(points[:, 0], points[:, 1], points[:, 2],
+                   s=2, color=point_rgb, alpha=0.35, depthshade=True)
+        ax.set_title(dataset.replace(" (3D)", ""), fontsize=13)
+        ax.set_box_aspect(np.ptp(v, axis=0))
+        ax.view_init(elev=22, azim=45)
+        ax.set_axis_off()
+
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=0.96, wspace=0.0)
+    fig.savefig(out / "gallery_3d.png", dpi=150)
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path,
@@ -68,6 +108,7 @@ def main() -> None:
     alpha_sweep(args.out)
     single(args.out, "spiral", 9.0, "spiral.png")
     single(args.out, "two moons", 6.0, "two_moons.png")
+    gallery_3d(args.out)
 
     print(f"Wrote gallery images to {args.out}")
     for png in sorted(args.out.glob("*.png")):
