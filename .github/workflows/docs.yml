@@ -1,0 +1,48 @@
+name: Docs
+
+# Build the Sphinx documentation and publish it to GitHub Pages on every push
+# to main (or manually). Requires Pages to be enabled with "GitHub Actions" as
+# the source in the repository settings.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One concurrent Pages deployment; don't cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Build docs
+        run: uv run --group docs sphinx-build -b html docs/source docs/build/html
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write          # publish to Pages
+      id-token: write        # OIDC verification for the deployment
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
