@@ -17,8 +17,10 @@ the venv and falls back to a system/nix-provided one that cannot import `ashp`
 (`ModuleNotFoundError: No module named 'ashp'`). Running `uv sync --group
 dashboard` once also works, after which a plain `uv run streamlit ...` is fine.
 
-Pick a dataset (two moons, spiral, annulus, uniform), set the number of points,
-and either drag the `alpha` slider or let the optimizer choose it.
+Pick a dataset — 2-D (two moons, spiral, annulus, uniform) or 3-D (ball, torus,
+blobs) — set the number of points, and either drag the `alpha` slider or let the
+optimizer choose it. 3-D datasets render the alpha-shape surface mesh with
+Plotly; alpha optimization is 2-D only.
 
 ## Files
 

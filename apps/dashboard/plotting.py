@@ -43,6 +43,24 @@ def sample_points(kind: str, n: int, seed: int = 0) -> np.ndarray:
         r = 0.15 + t / (3.5 * np.pi)
         pts = np.column_stack([r * np.cos(t), r * np.sin(t)])
         return pts + rng.normal(0.0, 0.025, pts.shape)
+    if kind == "ball (3D)":
+        v = rng.normal(size=(n, 3))
+        v /= np.linalg.norm(v, axis=1, keepdims=True)
+        r = rng.uniform(0.0, 1.0, n) ** (1.0 / 3.0)   # uniform in the volume
+        return v * r[:, None]
+    if kind == "torus (3D)":
+        big, small = 1.0, 0.4
+        u = rng.uniform(0.0, 2.0 * np.pi, n)
+        w = rng.uniform(0.0, 2.0 * np.pi, n)
+        pts = np.column_stack([(big + small * np.cos(w)) * np.cos(u),
+                               (big + small * np.cos(w)) * np.sin(u),
+                               small * np.sin(w)])
+        return pts + rng.normal(0.0, 0.02, pts.shape)
+    if kind == "blobs (3D)":
+        n1 = n // 2
+        a = rng.normal([-0.6, 0.0, 0.0], 0.25, (n1, 3))
+        b = rng.normal([0.6, 0.0, 0.0], 0.25, (n - n1, 3))
+        return np.vstack([a, b])
     raise ValueError(f"unknown dataset: {kind!r}")
 
 
@@ -138,4 +156,35 @@ def make_figure(points: np.ndarray, geom, title: str = "") -> go.Figure:
         title=title, template="simple_white",
         margin=dict(l=10, r=10, t=40 if title else 10, b=10))
     style_axes(fig)
+    return fig
+
+
+def make_figure_3d(points: np.ndarray, vertices: np.ndarray,
+                   faces: np.ndarray) -> go.Figure:
+    """
+    3-D figure: the input point cloud plus the alpha-shape surface mesh.
+
+    ``vertices``/``faces`` are the ``trimesh.Trimesh`` arrays returned by
+    :func:`ashp.alphashape` for 3-D input (``faces`` may be empty when alpha is
+    too high to retain any simplex).
+    """
+    points = np.asarray(points)
+    fig = go.Figure()
+    if faces.ndim == 2 and faces.shape[0] > 0:
+        fig.add_trace(go.Mesh3d(
+            x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
+            i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+            color=SHAPE_LINE, opacity=0.45, flatshading=True,
+            hoverinfo="skip", name="alpha shape"))
+    fig.add_trace(go.Scatter3d(
+        x=points[:, 0], y=points[:, 1], z=points[:, 2], mode="markers",
+        marker=dict(size=2.5, color=POINT_COLOR, opacity=0.85),
+        hoverinfo="skip", name="points"))
+    fig.update_layout(
+        template="simple_white", showlegend=False,
+        margin=dict(l=0, r=0, t=0, b=0),
+        scene=dict(aspectmode="data",
+                   xaxis=dict(visible=False),
+                   yaxis=dict(visible=False),
+                   zaxis=dict(visible=False)))
     return fig

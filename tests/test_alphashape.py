@@ -89,6 +89,17 @@ def test_2d_tiny_alpha_fills_to_convex_hull():
     assert shape.symmetric_difference(hull).area < 1e-9
 
 
+def test_3d_high_alpha_returns_empty_mesh_without_error():
+    """
+    A 3-D input with an alpha so high that no simplex passes must return an
+    empty mesh rather than raising (``fix_normals`` cannot run on no faces).
+    """
+    rng = np.random.default_rng(0)
+    pts = rng.random((50, 3))
+    mesh = alphashape(pts, 1e6)
+    assert np.asarray(mesh.faces).reshape(-1, 3).shape[0] == 0
+
+
 POINTS_3D = [
     (0., 0., 0.), (0., 0., 1.), (0., 1., 0.),
     (1., 0., 0.), (1., 1., 0.), (1., 0., 1.),

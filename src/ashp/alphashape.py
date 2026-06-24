@@ -277,9 +277,12 @@ def alphashape(points: Union[List[Tuple[float]], np.ndarray],
     # 3-D: build a surface mesh and fix the face windings.
     if dim == 3:
         import trimesh
-        result = trimesh.Trimesh(
-            vertices=coords, faces=list(set(map(tuple, boundary))))
-        trimesh.repair.fix_normals(result)
+        faces = list(set(map(tuple, boundary)))
+        result = trimesh.Trimesh(vertices=coords, faces=faces)
+        # fix_normals inspects mesh edges and fails on an empty face set, which
+        # happens when no simplex passes the radius filter (e.g. alpha too high).
+        if faces:
+            trimesh.repair.fix_normals(result)
         return result
 
     # 2-D: bulk-build the boundary edges and polygonise.
