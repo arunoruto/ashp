@@ -31,10 +31,13 @@ blobs) — set the number of points, and choose how alpha is selected:
 
 3-D datasets render the alpha-shape surface mesh with Plotly.
 
-Below the shape, the **Metrics vs alpha** panel sweeps alpha and plots the
-spread (std and coefficient of variation) of the kept Delaunay edge lengths and
-the number of connected components. Since the triangulation is fixed and alpha
-only drops edges, the whole sweep is one sort + prefix sums + a single
+Below the shape, the **Metrics vs alpha** panel sweeps alpha and plots: the
+spread (std / CV) of the kept Delaunay edge lengths, the **homogenisation rate**
+`−d(CV)/d(log α)` (whose peak marks the blob→structure transition and is far more
+stable across point count than the circumradius knee), and the connected-
+component count. Vertical lines mark the alpha in use and the alphas the *knee*
+and *persistence* selectors would choose. Since the triangulation is fixed and
+alpha only drops edges, the whole sweep is one sort + prefix sums + a single
 union-find pass (no per-alpha recomputation), so it updates instantly.
 
 ## Files

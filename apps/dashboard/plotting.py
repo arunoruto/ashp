@@ -224,16 +224,36 @@ def knee_figure(knee) -> go.Figure:
     return fig
 
 
-def sweep_figure(sweep, selected_alpha=None) -> go.Figure:
+def homogenisation_rate(sweep) -> np.ndarray:
+    """``-d(CV)/d(log alpha)`` — the rate the kept edges become homogeneous.
+
+    The CV curve is a smooth descent; its (negated) derivative turns the gradual
+    elbow into a sharp peak at the blob -> structure transition, which is far
+    more stable across point count than the circumradius knee.
     """
-    Two stacked panels vs alpha (``sweep`` is an :class:`ashp.AlphaSweep`):
-    the spread of kept edge lengths (std + coefficient of variation), and the
-    number of connected pieces.  ``selected_alpha`` is marked on both.
+    if sweep.alpha.size < 3:
+        return np.zeros_like(sweep.edge_cv)
+    rate = -np.gradient(sweep.edge_cv, np.log(sweep.alpha))
+    return np.convolve(rate, np.ones(3) / 3.0, mode="same")  # light smoothing
+
+
+def sweep_figure(sweep, markers=()) -> go.Figure:
     """
+    Three stacked panels vs alpha (``sweep`` is an :class:`ashp.AlphaSweep`):
+    edge-length spread (std + CV), the homogenisation rate ``-d(CV)/d(log a)``
+    (sharp peak at the transition), and the connected-component count.
+
+    ``markers`` is an iterable of ``(alpha, label, color)`` drawn as vertical
+    lines across all panels (e.g. the alpha in use and the candidate selectors).
+    """
+    rate = homogenisation_rate(sweep)
     fig = make_subplots(
-        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.09,
-        specs=[[{"secondary_y": True}], [{"secondary_y": False}]],
-        subplot_titles=("edge-length spread", "connectivity"))
+        rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+        specs=[[{"secondary_y": True}], [{"secondary_y": False}],
+               [{"secondary_y": False}]],
+        subplot_titles=("edge-length spread",
+                        "homogenisation rate  −d(CV)/d(log α)",
+                        "connectivity"))
 
     fig.add_trace(go.Scatter(
         x=sweep.alpha, y=sweep.edge_std, name="std",
@@ -241,23 +261,42 @@ def sweep_figure(sweep, selected_alpha=None) -> go.Figure:
     fig.add_trace(go.Scatter(
         x=sweep.alpha, y=sweep.edge_cv, name="CV = std/mean",
         line=dict(color="#ff7f0e", width=2)), row=1, col=1, secondary_y=True)
+
+    fig.add_trace(go.Scatter(
+        x=sweep.alpha, y=rate, name="−dCV/dlogα",
+        line=dict(color="#9467bd", width=2)), row=2, col=1)
+    if rate.size:
+        pk = int(np.argmax(rate))
+        fig.add_trace(go.Scatter(
+            x=[sweep.alpha[pk]], y=[rate[pk]], mode="markers", showlegend=False,
+            marker=dict(color="#9467bd", size=9)), row=2, col=1)
+
     fig.add_trace(go.Scatter(
         x=sweep.alpha, y=sweep.n_components, name="# components",
-        line=dict(color="#2ca02c", width=2)), row=2, col=1)
+        line=dict(color="#2ca02c", width=2)), row=3, col=1)
 
-    if selected_alpha:
-        fig.add_vline(x=selected_alpha, line=dict(color="#d62728", dash="dash"),
-                      row=1, col=1)
-        fig.add_vline(x=selected_alpha, line=dict(color="#d62728", dash="dash"),
-                      row=2, col=1)
+    positions = ["top left", "top", "top right"]
+    for i, (alpha, label, color) in enumerate(markers):
+        if not alpha or alpha <= 0:
+            continue
+        dash = "dash" if label == "in use" else "dot"
+        for r in (1, 2, 3):
+            fig.add_vline(x=alpha, line=dict(color=color, dash=dash, width=1.5),
+                          row=r, col=1)
+        fig.add_vline(x=alpha, line=dict(color=color, dash=dash, width=1.5),
+                      row=1, col=1, annotation_text=label,
+                      annotation_position=positions[i % len(positions)],
+                      annotation_font=dict(color=color, size=11))
 
-    fig.update_xaxes(type="log", row=1, col=1)
-    fig.update_xaxes(type="log", title="alpha (log scale)", row=2, col=1)
+    for r in (1, 2, 3):
+        fig.update_xaxes(type="log", row=r, col=1)
+    fig.update_xaxes(title="alpha (log scale)", row=3, col=1)
     fig.update_yaxes(title="std", row=1, col=1, secondary_y=False)
     fig.update_yaxes(title="CV", row=1, col=1, secondary_y=True)
-    fig.update_yaxes(title="# components", type="log", row=2, col=1)
+    fig.update_yaxes(title="rate", row=2, col=1)
+    fig.update_yaxes(title="# components", type="log", row=3, col=1)
     fig.update_layout(
-        template="simple_white", height=460,
-        margin=dict(l=10, r=10, t=30, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.04, x=0))
+        template="simple_white", height=620,
+        margin=dict(l=10, r=10, t=40, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.06, x=0))
     return fig

@@ -23,7 +23,7 @@ for _p in (_HERE, _HERE.parents[1] / "src"):
 import numpy as np  # noqa: E402
 
 from ashp import (alphashape, alpha_knee, alpha_sweep,  # noqa: E402
-                  optimizealpha, select_alpha)
+                  cluster_persistence, optimizealpha, select_alpha)
 from plotting import (knee_figure, make_figure, make_figure_3d,  # noqa: E402
                       sample_points, sweep_figure)
 
@@ -147,13 +147,27 @@ def sweep_data(dataset: str, n: int, seed: int):
     return alpha_sweep(sample_points(dataset, n, seed))
 
 
+@st.cache_data(show_spinner=False)
+def candidate_alphas(dataset: str, n: int, seed: int):
+    """The alphas the other selectors would pick, for the overlay."""
+    pts = sample_points(dataset, n, seed)
+    knee = alpha_knee(pts).alpha
+    pers = cluster_persistence(pts, min_size=max(5, n // 40)).best_alpha
+    return knee, pers
+
+
 st.subheader("Metrics vs alpha")
 st.caption(
-    "The Delaunay graph is fixed — alpha only drops edges. As alpha rises, the "
-    "spread (std) and **coefficient of variation** (CV = std/mean) of the kept "
-    "edge lengths fall as the long bridges are removed; the number of connected "
-    "**components** rises as the shape fragments. A good alpha sits where CV has "
-    "levelled off but the shape hasn't shattered yet. The dashed line is the "
-    "alpha in use.")
-st.plotly_chart(sweep_figure(sweep_data(dataset, n, int(seed)), used_alpha),
+    "The Delaunay graph is fixed — alpha only drops edges. As alpha rises the "
+    "spread (std / **CV**) of the kept edge lengths falls as the long bridges "
+    "are removed, and the **components** count rises as the shape fragments. "
+    "The middle panel, **−d(CV)/d(log α)**, is the sensitive one: its peak marks "
+    "the blob→structure transition and barely moves with point count. Vertical "
+    "lines mark the alpha in use and what the *knee* / *persistence* selectors "
+    "would choose.")
+knee_a, pers_a = candidate_alphas(dataset, n, int(seed))
+markers = [(used_alpha, "in use", "#d62728"),
+           (knee_a, "knee", "#7f7f7f"),
+           (pers_a, "persistence", "#8c564b")]
+st.plotly_chart(sweep_figure(sweep_data(dataset, n, int(seed)), markers),
                 width="stretch")
