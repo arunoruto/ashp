@@ -132,19 +132,27 @@ def select_alpha(points: Union[List[Tuple[float]], np.ndarray],
       (the convex hull); smaller ``q`` carves tighter.
     * ``method="knee"`` finds the cutoff automatically at the knee of the
       sorted circumradius curve (see :func:`alpha_knee`) — no ``q`` to choose.
+    * ``method="band"`` picks the centre of the usable alpha band (see
+      :func:`ashp.alpha_band`): between where the long bridges are cut and where
+      the shape starts to fragment.  Falls back to the knee when there is no
+      clean structural scale.
 
     Args:
         points: an iterable container of points (2-D or 3-D).
         q: fraction of simplices to keep, in ``[0, 1]`` (quantile method).
-        method: ``"quantile"`` or ``"knee"``.
+        method: ``"quantile"``, ``"knee"`` or ``"band"``.
 
     Returns:
         float: an alpha value, or ``0.0`` (convex hull) if it cannot be found.
     """
     if method == "knee":
         return alpha_knee(points).alpha
+    if method == "band":
+        from .cluster import alpha_band
+        centre = alpha_band(points)
+        return centre if centre is not None else alpha_knee(points).alpha
     if method != "quantile":
-        raise ValueError("method must be 'quantile' or 'knee'")
+        raise ValueError("method must be 'quantile', 'knee' or 'band'")
 
     if not 0.0 <= q <= 1.0:
         raise ValueError("q must be in [0, 1]")

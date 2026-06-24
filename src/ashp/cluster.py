@@ -19,7 +19,8 @@ import numpy as np
 from .alphashape import _delaunay_circumradii
 
 __all__ = ['cluster', 'cluster_persistence', 'ClusterPersistence',
-           'alpha_sweep', 'AlphaSweep']
+           'alpha_sweep', 'AlphaSweep', 'homogenisation_rate', 'usable_band',
+           'alpha_band']
 
 
 class _UnionFind:
@@ -276,3 +277,63 @@ def alpha_sweep(points: Union[List[Tuple[float]], np.ndarray],
     cv = np.where(mean > 0, std / mean, 0.0)
     return AlphaSweep(alpha=alpha, edge_std=std, edge_cv=cv,
                       n_components=comp_after[k], n_edges=k)
+
+
+def homogenisation_rate(sweep: AlphaSweep) -> np.ndarray:
+    """``-d(CV)/d(log alpha)`` over a :class:`AlphaSweep`.
+
+    The CV curve is a smooth descent; its negated derivative turns the gradual
+    elbow into a sharp peak at the blob -> structure transition (the scale at
+    which the long bridges are being cut), which is far more stable across point
+    count than the circumradius knee.
+    """
+    if sweep.alpha.size < 3:
+        return np.zeros_like(sweep.edge_cv)
+    rate = -np.gradient(sweep.edge_cv, np.log(sweep.alpha))
+    return np.convolve(rate, np.ones(3) / 3.0, mode="same")  # light smoothing
+
+
+def _rise_knee(values: np.ndarray, alpha: np.ndarray) -> float:
+    """Alpha where a flat-then-rising curve starts climbing (Kneedle)."""
+    if alpha.size < 3:
+        return float(alpha[-1]) if alpha.size else 0.0
+    y = np.log(np.maximum(values, 1.0))
+    la = np.log(alpha)
+    x = (la - la[0]) / (la[-1] - la[0])
+    yy = (y - y[0]) / (y[-1] - y[0] + 1e-12)
+    return float(alpha[int(np.argmax(x - yy))])
+
+
+def usable_band(sweep: AlphaSweep):
+    """
+    The alpha range worth picking from, or ``None`` if there isn't one.
+
+    Lower edge: the homogenisation-rate peak (the long bridges have been cut, so
+    below it the shape is still a blob).  Upper edge: where the component count
+    starts climbing (above it the shape fragments).  When the lower edge is above
+    the upper one there is no clean structural scale (e.g. a featureless uniform
+    cloud) and ``None`` is returned.
+
+    Returns:
+        ``(lo, hi, centre)`` with ``centre`` the geometric mean, or ``None``.
+    """
+    rate = homogenisation_rate(sweep)
+    if rate.size == 0:
+        return None
+    lo = float(sweep.alpha[int(np.argmax(rate))])
+    hi = _rise_knee(sweep.n_components, sweep.alpha)
+    if lo >= hi:
+        return None
+    return lo, hi, float(np.sqrt(lo * hi))
+
+
+def alpha_band(points: Union[List[Tuple[float]], np.ndarray],
+               n_steps: int = 80):
+    """
+    Suggested alpha at the centre of the usable band (see :func:`usable_band`).
+
+    Returns ``None`` when there is no clean structural scale, so callers can fall
+    back to another selector.
+    """
+    band = usable_band(alpha_sweep(points, n_steps))
+    return None if band is None else band[2]

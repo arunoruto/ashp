@@ -5,7 +5,8 @@
 
 import numpy as np
 
-from ashp import alpha_sweep, cluster, cluster_persistence
+from ashp import (alpha_band, alpha_sweep, cluster, cluster_persistence,
+                  select_alpha, usable_band)
 
 
 def _two_blobs(seed=0, n=120, gap=6.0):
@@ -51,3 +52,24 @@ def test_alpha_sweep_metrics_are_monotonic():
     assert np.all(np.diff(sw.n_components) >= 0)       # only fragments as alpha grows
     assert np.all(np.diff(sw.n_edges) <= 0)            # fewer edges as alpha grows
     assert np.all(sw.edge_std >= 0) and np.all(sw.edge_cv >= 0)
+
+
+def test_usable_band_present_for_structure_absent_for_uniform():
+    pts, _ = _two_blobs()                       # clear structure -> a band
+    band = usable_band(alpha_sweep(pts))
+    assert band is not None
+    lo, hi, centre = band
+    assert lo < centre < hi
+
+    rng = np.random.default_rng(0)               # no structure -> no band
+    assert usable_band(alpha_sweep(rng.random((400, 2)))) is None
+
+
+def test_select_alpha_band_falls_back_when_no_band():
+    pts, _ = _two_blobs()
+    assert select_alpha(pts, method="band") == alpha_band(pts)
+    # uniform has no band -> select_alpha falls back to a positive (knee) alpha
+    rng = np.random.default_rng(0)
+    uni = rng.random((400, 2))
+    assert alpha_band(uni) is None
+    assert select_alpha(uni, method="band") > 0.0

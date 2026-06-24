@@ -10,6 +10,8 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from ashp import homogenisation_rate, usable_band
+
 POINT_COLOR = "rgb(55, 65, 80)"
 SHAPE_LINE = "rgb(31, 119, 180)"
 SHAPE_FILL = "rgba(31, 119, 180, 0.22)"
@@ -222,48 +224,6 @@ def knee_figure(knee) -> go.Figure:
         xaxis=dict(title="Delaunay simplices (sorted, percentile)"),
         yaxis=dict(title="circumradius", type="log"))
     return fig
-
-
-def homogenisation_rate(sweep) -> np.ndarray:
-    """``-d(CV)/d(log alpha)`` — the rate the kept edges become homogeneous.
-
-    The CV curve is a smooth descent; its (negated) derivative turns the gradual
-    elbow into a sharp peak at the blob -> structure transition, which is far
-    more stable across point count than the circumradius knee.
-    """
-    if sweep.alpha.size < 3:
-        return np.zeros_like(sweep.edge_cv)
-    rate = -np.gradient(sweep.edge_cv, np.log(sweep.alpha))
-    return np.convolve(rate, np.ones(3) / 3.0, mode="same")  # light smoothing
-
-
-def _rise_knee(values: np.ndarray, alpha: np.ndarray) -> float:
-    """Alpha where a flat-then-rising curve starts climbing (Kneedle)."""
-    if alpha.size < 3:
-        return float(alpha[-1]) if alpha.size else 0.0
-    y = np.log(np.maximum(values, 1.0))
-    la = np.log(alpha)
-    x = (la - la[0]) / (la[-1] - la[0])
-    yy = (y - y[0]) / (y[-1] - y[0] + 1e-12)
-    return float(alpha[int(np.argmax(x - yy))])
-
-
-def usable_band(sweep):
-    """The alpha range worth picking from, or ``None`` if there isn't one.
-
-    Lower edge: the homogenisation-rate peak (the long bridges have been cut).
-    Upper edge: where the component count starts climbing (the shape begins to
-    fragment).  When the lower edge is above the upper one there is no clean
-    structural scale (e.g. a featureless uniform cloud), so ``None`` is returned.
-    """
-    rate = homogenisation_rate(sweep)
-    if rate.size == 0:
-        return None
-    lo = float(sweep.alpha[int(np.argmax(rate))])
-    hi = _rise_knee(sweep.n_components, sweep.alpha)
-    if lo >= hi:
-        return None
-    return lo, hi, float(np.sqrt(lo * hi))
 
 
 def sweep_figure(sweep, markers=()) -> go.Figure:

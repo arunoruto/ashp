@@ -44,7 +44,7 @@ with st.sidebar:
     seed = st.number_input("Random seed", min_value=0, max_value=9999, value=0)
 
     st.header("Alpha")
-    modes = ["Knee (auto)", "Quantile (robust)", "Manual"]
+    modes = ["Band (auto)", "Knee (auto)", "Quantile (robust)", "Manual"]
     if not is_3d:
         modes.append("Optimize (cover all)")
     mode = st.radio("Selection", modes, index=0)
@@ -65,6 +65,10 @@ with st.sidebar:
         st.caption("alpha_knee: cuts the long 'bridge' edges automatically at "
                    "the knee of the circumradius distribution. See the "
                    "diagnostic below the shape.")
+    elif mode == "Band (auto)":
+        st.caption("alpha_band: the centre of the usable band — past the blob, "
+                   "before fragmentation (green band in the panel below). Falls "
+                   "back to the knee when there is no clean structural scale.")
 
 
 @st.cache_data(show_spinner=False)
@@ -81,6 +85,8 @@ def compute(dataset: str, n: int, seed: int, mode: str, alpha: float, q: float):
     if mode == "Knee (auto)":
         knee = alpha_knee(points)
         used = knee.alpha
+    elif mode == "Band (auto)":
+        used = select_alpha(points, method="band")
     elif mode == "Quantile (robust)":
         used = select_alpha(points, q)
     elif mode == "Optimize (cover all)":

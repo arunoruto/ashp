@@ -154,6 +154,10 @@ shape = alphashape(points, select_alpha(points, method="knee"))  # auto cutoff
 # curve (the DBSCAN-eps heuristic): it drops the long edges that bridge gaps /
 # holes and keeps the homogeneous local connections. alpha_knee() also returns
 # the diagnostic curve.
+shape = alphashape(points, select_alpha(points, method="band"))
+# 'band' targets the centre of the usable alpha range — past the blob, before
+# the shape fragments — and is the most point-count-stable of the selectors;
+# alpha_sweep() / usable_band() expose the underlying curves and band.
 
 # Or solve for the tightest alpha that keeps every point in one polygon.
 # Note: this is a bottleneck statistic — sensitive to outliers and density:
