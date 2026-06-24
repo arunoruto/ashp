@@ -6,6 +6,7 @@
 -->
 
 [![CI][ci-shield]][ci-url]
+[![Docs][docs-shield]][docs-url]
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -20,7 +21,7 @@
   <p align="center">
     Fast alpha shapes (concave hulls) for Python — a maintained, numba-accelerated fork of <a href="https://github.com/bellockk/alphashape">alphashape</a>.
     <br />
-    <a href="#usage"><strong>Explore the docs »</strong></a>
+    <a href="https://arunoruto.github.io/ashp/"><strong>Explore the docs »</strong></a>
     <br />
     <br />
     <a href="apps/dashboard">Interactive Dashboard</a>
@@ -286,6 +287,8 @@ Project Link: [https://github.com/arunoruto/ashp](https://github.com/arunoruto/a
 <!-- MARKDOWN LINKS & IMAGES -->
 [ci-shield]: https://img.shields.io/github/actions/workflow/status/arunoruto/ashp/release.yml?branch=main&style=for-the-badge&label=ci
 [ci-url]: https://github.com/arunoruto/ashp/actions/workflows/release.yml
+[docs-shield]: https://img.shields.io/badge/docs-online-success?style=for-the-badge
+[docs-url]: https://arunoruto.github.io/ashp/
 [contributors-shield]: https://img.shields.io/github/contributors/arunoruto/ashp.svg?style=for-the-badge
 [contributors-url]: https://github.com/arunoruto/ashp/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/arunoruto/ashp.svg?style=for-the-badge
