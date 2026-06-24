@@ -1,6 +1,6 @@
 [project]
 name = "ashp"
-version = "1.3.1"
+version = "1.4.0"
 description = "Toolbox for generating alpha shapes (fork of alphashape)."
 authors = [{ name = "Mirza Arnaut", email = "mirza.arnaut45@gmail.com" }]
 license = { text = "MIT" }
@@ -24,6 +24,7 @@ geo = ["geopandas>=1.1.3"]
 [project.scripts]
 ashp = "ashp.cli:main"
 
+
 [dependency-groups]
 dashboard = [
     "matplotlib>=3.11.0",
@@ -35,14 +36,6 @@ test = ["geopandas>=1.1.3", "pytest>=8.0.0", "pytest-cov>=4.1.0"]
 [tool.uv]
 default-groups = ["test"]
 
-[build-system]
-requires = ["uv_build>=0.8.0,<1.0.0"]
-build-backend = "uv_build"
-
-# [tool.uv.build-backend]
-# module-name = "ashp"
-# module-root = "src"
-
 [tool.pyright]
 exclude = [".venv", "alphashape"]
 venvPath = ".venv"
@@ -51,6 +44,7 @@ venv = "."
 [tool.ty.environment]
 python = "./.venv"
 
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
@@ -58,6 +52,7 @@ log_cli = false
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
@@ -73,3 +68,12 @@ uv build
 
 [tool.semantic_release.branches.main]
 match = "main"
+
+[build-system]
+requires = ["uv_build>=0.8.0,<1.0.0"]
+build-backend = "uv_build"
+
+# [tool.uv.build-backend]
+# module-name = "ashp"
+# module-root = "src"
+
