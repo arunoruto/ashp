@@ -248,7 +248,7 @@ def sweep_figure(sweep, markers=()) -> go.Figure:
     """
     rate = homogenisation_rate(sweep)
     fig = make_subplots(
-        rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+        rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.11,
         specs=[[{"secondary_y": True}], [{"secondary_y": False}],
                [{"secondary_y": False}]],
         subplot_titles=("edge-length spread",
@@ -275,28 +275,33 @@ def sweep_figure(sweep, markers=()) -> go.Figure:
         x=sweep.alpha, y=sweep.n_components, name="# components",
         line=dict(color="#2ca02c", width=2)), row=3, col=1)
 
-    positions = ["top left", "top", "top right"]
-    for i, (alpha, label, color) in enumerate(markers):
-        if not alpha or alpha <= 0:
+    # Markers as plain vertical lines (no annotations — those break the
+    # autorange) plus a legend entry each.  Only those inside the sweep range
+    # are drawn, so a stray selector can't blow the x-axis out.
+    lo, hi = float(sweep.alpha.min()), float(sweep.alpha.max())
+    for alpha, label, color in markers:
+        if not alpha or not (lo <= alpha <= hi):
             continue
         dash = "dash" if label == "in use" else "dot"
         for r in (1, 2, 3):
             fig.add_vline(x=alpha, line=dict(color=color, dash=dash, width=1.5),
                           row=r, col=1)
-        fig.add_vline(x=alpha, line=dict(color=color, dash=dash, width=1.5),
-                      row=1, col=1, annotation_text=label,
-                      annotation_position=positions[i % len(positions)],
-                      annotation_font=dict(color=color, size=11))
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="lines", name=label,
+            line=dict(color=color, dash=dash, width=1.5)),
+            row=1, col=1, secondary_y=False)
 
+    xrange = [np.log10(lo) - 0.03, np.log10(hi) + 0.03]
     for r in (1, 2, 3):
-        fig.update_xaxes(type="log", row=r, col=1)
+        fig.update_xaxes(type="log", range=xrange, row=r, col=1)
     fig.update_xaxes(title="alpha (log scale)", row=3, col=1)
     fig.update_yaxes(title="std", row=1, col=1, secondary_y=False)
     fig.update_yaxes(title="CV", row=1, col=1, secondary_y=True)
     fig.update_yaxes(title="rate", row=2, col=1)
     fig.update_yaxes(title="# components", type="log", row=3, col=1)
     fig.update_layout(
-        template="simple_white", height=620,
-        margin=dict(l=10, r=10, t=40, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.06, x=0))
+        template="simple_white", height=640,
+        margin=dict(l=10, r=10, t=60, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, x=0))
+    fig.update_annotations(font_size=12)  # subplot titles
     return fig
