@@ -157,6 +157,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Vendored upstream reference copy (separate git clone kept locally for syncing)
+/alphashape/
+
 # Spyder project settings
 .spyderproject
 .spyproject
