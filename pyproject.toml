@@ -59,9 +59,10 @@ version_toml = ["pyproject.toml:project.version"]
 major_on_zero = false
 commit_parser = "conventional"
 commit_message = "chore(release): {version} [skip ci]"
-# Bump pyproject, refresh the project's own version in uv.lock, then build.
+# Bump pyproject, sync the project's own version in uv.lock (plain `uv lock`;
+# --upgrade-package only touches registry deps, not the root project), build.
 build_command = """
-uv lock --upgrade-package "$PACKAGE_NAME"
+uv lock
 git add uv.lock
 uv build
 """
