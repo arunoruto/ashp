@@ -145,10 +145,15 @@ points = [(0., 0.), (0., 1.), (1., 1.), (1., 0.),
 # Fixed alpha (larger = tighter / more concave; 0 = convex hull):
 shape = alphashape(points, alpha=2.0)        # -> shapely geometry
 
-# Pick alpha from a circumradius quantile — fast, outlier-robust, and the
-# resulting shape stays stable as the point count changes (q in [0, 1];
-# 1 = convex hull, lower carves tighter). Works in 2-D and 3-D:
-shape = alphashape(points, select_alpha(points, q=0.9))
+# Pick alpha from the circumradius distribution — fast, outlier-robust, and the
+# resulting shape stays stable as the point count changes. Works in 2-D and 3-D:
+shape = alphashape(points, select_alpha(points, q=0.9))     # keep 90% of simplices
+shape = alphashape(points, select_alpha(points, method="knee"))  # auto cutoff
+
+# 'knee' finds the cutoff automatically at the knee of the sorted circumradius
+# curve (the DBSCAN-eps heuristic): it drops the long edges that bridge gaps /
+# holes and keeps the homogeneous local connections. alpha_knee() also returns
+# the diagnostic curve.
 
 # Or solve for the tightest alpha that keeps every point in one polygon.
 # Note: this is a bottleneck statistic — sensitive to outliers and density:

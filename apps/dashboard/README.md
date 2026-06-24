@@ -20,18 +20,16 @@ dashboard` once also works, after which a plain `uv run streamlit ...` is fine.
 Pick a dataset — 2-D (two moons, spiral, annulus, uniform) or 3-D (ball, torus,
 blobs) — set the number of points, and choose how alpha is selected:
 
+- **Knee (auto)** — `alpha_knee`; finds the cutoff at the knee of the sorted
+  circumradius curve, dropping the long edges that bridge gaps. Shows the
+  diagnostic curve below the shape (the default).
 - **Quantile (robust)** — `select_alpha(points, q)`; a rank statistic, so the
-  shape stays stable as you change the point count (the default).
+  shape stays stable as you change the point count.
 - **Manual** — set alpha directly (its useful range shifts with point count).
 - **Optimize (cover all)** — `optimizealpha`; tightest single polygon covering
   every point (2-D only).
 
 3-D datasets render the alpha-shape surface mesh with Plotly.
-
-The **Clustering** tab treats the connected components of the alpha complex as
-clusters (the single-linkage / DBSCAN-like view) and shows a persistence curve —
-cluster count vs alpha — with the most stable scale picked automatically, read
-like a k-means elbow plot. Points are coloured by cluster (noise in grey).
 
 ## Files
 

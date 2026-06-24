@@ -1,6 +1,7 @@
-__all__ = ['optimizealpha', 'select_alpha']
+__all__ = ['optimizealpha', 'select_alpha', 'alpha_knee', 'AlphaKnee']
 import sys
 import warnings
+from dataclasses import dataclass
 import shapely
 from shapely.geometry import MultiPoint
 import trimesh
@@ -43,43 +44,115 @@ def _testalpha(points: Union[List[Tuple[float]], np.ndarray], alpha: float):
         return False
 
 
-def select_alpha(points: Union[List[Tuple[float]], np.ndarray],
-                 q: float = 0.9) -> float:
+def _as_point_array(points):
+    """Extract a plain coordinate array, unwrapping geopandas inputs."""
+    if USE_GP and isinstance(points, geopandas.GeoDataFrame):
+        points = points['geometry']
+    if USE_GP and isinstance(points, geopandas.geoseries.GeoSeries):
+        points = np.array([point.coords[0] for point in points])
+    return points
+
+
+@dataclass
+class AlphaKnee:
+    """Result of :func:`alpha_knee`.
+
+    Attributes:
+        radii_sorted: the Delaunay circumradii, sorted ascending (the curve).
+        knee_index: index into ``radii_sorted`` of the detected knee.
+        cut: circumradius at the knee (the cutoff; simplices above it are
+            dropped).
+        alpha: ``1 / cut`` — the selected alpha.
     """
-    Pick an alpha from a quantile of the Delaunay circumradii.
+    radii_sorted: np.ndarray
+    knee_index: int
+    cut: float
+    alpha: float
 
-    A fast, outlier-robust alternative to :func:`optimizealpha`.  It keeps the
-    fraction ``q`` of simplices with the smallest circumradius and drops the
-    largest ``1 - q`` (the slivers that bridge gaps), returning the matching
-    ``alpha = 1 / circumradius`` threshold.
 
-    Because ``q`` is a rank statistic, the *shape* it produces stays consistent
-    as the number of points changes, even though the alpha value itself scales
-    with point density.  ``q = 1`` keeps every simplex and returns ``0.0`` (the
-    convex hull); smaller ``q`` carves the shape more tightly.
+def _knee_index(values: np.ndarray) -> int:
+    """Index of the knee of a sorted, convex-increasing curve (Kneedle): the
+    point lying farthest below the chord from the first to the last sample."""
+    n = len(values)
+    if n < 3:
+        return n - 1
+    span = values[-1] - values[0]
+    if span <= 0:
+        return n - 1
+    x = np.arange(n) / (n - 1)
+    y = (values - values[0]) / span
+    return int(np.argmax(x - y))
 
-    Unlike :func:`optimizealpha` this needs a single triangulation and no
-    bisection, and it works the same way in 2-D and 3-D.
+
+def alpha_knee(points: Union[List[Tuple[float]], np.ndarray]) -> AlphaKnee:
+    """
+    Pick alpha at the knee of the sorted circumradius curve.
+
+    The Delaunay circumradii split into a homogeneous bulk (the local
+    neighbour connections) and a long tail (the slivers that bridge gaps or
+    holes).  The knee of the sorted curve — the classic heuristic also used to
+    choose DBSCAN's ``eps`` — separates the two, so every simplex above it (the
+    unwanted long connections) is dropped.  Parameter-free, and works the same
+    in 2-D and 3-D.
+
+    The knee is found in log-radius, which is robust to the handful of
+    near-degenerate slivers (huge circumradius) that 3-D triangulations in
+    particular produce; on a linear scale those outliers dominate and push the
+    knee to the very end of the curve.
 
     Args:
         points: an iterable container of points (2-D or 3-D).
-        q: fraction of simplices to keep, in ``[0, 1]``.
+
+    Returns:
+        An :class:`AlphaKnee` with the chosen alpha and the diagnostic curve.
+    """
+    from .alphashape import _delaunay_circumradii
+    _, _, radii = _delaunay_circumradii(_as_point_array(points))
+    radii = np.sort(radii[np.isfinite(radii)])
+    radii = radii[radii > 0.0]
+    if radii.size == 0:
+        return AlphaKnee(radii, 0, 0.0, 0.0)
+    knee = _knee_index(np.log(radii))
+    cut = float(radii[knee])
+    return AlphaKnee(radii, knee, cut, 1.0 / cut if cut > 0.0 else 0.0)
+
+
+def select_alpha(points: Union[List[Tuple[float]], np.ndarray],
+                 q: float = 0.9, method: str = "quantile") -> float:
+    """
+    Pick an alpha from the Delaunay circumradius distribution.
+
+    A fast, outlier-robust alternative to :func:`optimizealpha` (a single
+    triangulation, no bisection; works in 2-D and 3-D).  Two strategies:
+
+    * ``method="quantile"`` keeps the fraction ``q`` of simplices with the
+      smallest circumradius and drops the largest ``1 - q`` (the slivers that
+      bridge gaps).  Because ``q`` is a rank statistic the resulting *shape*
+      stays consistent as the point count changes.  ``q = 1`` returns ``0.0``
+      (the convex hull); smaller ``q`` carves tighter.
+    * ``method="knee"`` finds the cutoff automatically at the knee of the
+      sorted circumradius curve (see :func:`alpha_knee`) — no ``q`` to choose.
+
+    Args:
+        points: an iterable container of points (2-D or 3-D).
+        q: fraction of simplices to keep, in ``[0, 1]`` (quantile method).
+        method: ``"quantile"`` or ``"knee"``.
 
     Returns:
         float: an alpha value, or ``0.0`` (convex hull) if it cannot be found.
     """
+    if method == "knee":
+        return alpha_knee(points).alpha
+    if method != "quantile":
+        raise ValueError("method must be 'quantile' or 'knee'")
+
     if not 0.0 <= q <= 1.0:
         raise ValueError("q must be in [0, 1]")
     if q >= 1.0:
         return 0.0  # keep every simplex -> convex hull
 
-    if USE_GP and isinstance(points, geopandas.GeoDataFrame):
-        points = points['geometry']
-    if USE_GP and isinstance(points, geopandas.geoseries.GeoSeries):
-        points = np.array([point.coords[0] for point in points])
-
     from .alphashape import _delaunay_circumradii
-    _, _, radii = _delaunay_circumradii(points)
+    _, _, radii = _delaunay_circumradii(_as_point_array(points))
     radii = radii[np.isfinite(radii)]
     if radii.size == 0:
         return 0.0

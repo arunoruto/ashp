@@ -191,54 +191,33 @@ def make_figure_3d(points: np.ndarray, vertices: np.ndarray,
 
 
 # --------------------------------------------------------------------------- #
-# Clustering views
+# Alpha-selection diagnostic
 # --------------------------------------------------------------------------- #
-_PALETTE = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
-            "#e377c2", "#bcbd22", "#17becf", "#aec7e8", "#ffbb78", "#98df8a"]
-_NOISE_COLOR = "#cccccc"
+def knee_figure(knee) -> go.Figure:
+    """
+    Plot the sorted Delaunay circumradii with the chosen knee marked.
 
-
-def _label_colors(labels: np.ndarray):
-    return [_NOISE_COLOR if int(c) < 0 else _PALETTE[int(c) % len(_PALETTE)]
-            for c in labels]
-
-
-def cluster_figure(points: np.ndarray, labels: np.ndarray) -> go.Figure:
-    """Scatter the points coloured by cluster label (noise in grey); 2-D or 3-D."""
-    points = np.asarray(points)
-    colors = _label_colors(labels)
+    ``knee`` is an :class:`ashp.AlphaKnee`.  Simplices left of the dashed line
+    (the homogeneous local connections) are kept; the steep tail to its right
+    (the long edges bridging gaps) is dropped.
+    """
+    radii = np.asarray(knee.radii_sorted)
     fig = go.Figure()
-    if points.shape[1] == 3:
-        fig.add_trace(go.Scatter3d(
-            x=points[:, 0], y=points[:, 1], z=points[:, 2], mode="markers",
-            marker=dict(size=2.5, color=colors), hoverinfo="skip"))
-        fig.update_layout(scene=dict(
-            aspectmode="data", xaxis=dict(visible=False),
-            yaxis=dict(visible=False), zaxis=dict(visible=False)))
-    else:
-        fig.add_trace(go.Scatter(
-            x=points[:, 0], y=points[:, 1], mode="markers",
-            marker=dict(size=6, color=colors), hoverinfo="skip"))
-        style_axes(fig)
-    fig.update_layout(template="simple_white", showlegend=False,
-                      margin=dict(l=0, r=0, t=0, b=0))
-    return fig
+    if radii.size == 0:
+        return fig
 
-
-def persistence_figure(alpha: np.ndarray, n_clusters: np.ndarray,
-                       best_alpha: float, best_k: int) -> go.Figure:
-    """Plot cluster count vs alpha (the elbow), marking the chosen scale."""
-    fig = go.Figure()
+    pct = np.linspace(0.0, 100.0, radii.size)
+    knee_pct = 100.0 * knee.knee_index / max(radii.size - 1, 1)
     fig.add_trace(go.Scatter(
-        x=alpha, y=n_clusters, mode="lines", line_shape="hv",
-        line=dict(color=SHAPE_LINE, width=2), hoverinfo="x+y",
-        name="# clusters"))
-    fig.add_vline(x=best_alpha, line=dict(color="#d62728", dash="dash"),
-                  annotation_text=f"best α ≈ {best_alpha:.2f} (k = {best_k})",
-                  annotation_position="top")
+        x=pct, y=radii, mode="lines", line=dict(color=SHAPE_LINE, width=2),
+        hoverinfo="x+y", name="circumradius"))
+    fig.add_vline(x=knee_pct, line=dict(color="#d62728", dash="dash"),
+                  annotation_text=f"knee → α ≈ {knee.alpha:.2f}",
+                  annotation_position="top left")
+    fig.add_hline(y=knee.cut, line=dict(color="#d62728", dash="dot"))
     fig.update_layout(
         template="simple_white", showlegend=False,
         margin=dict(l=10, r=10, t=30, b=10),
-        xaxis=dict(title="alpha (log scale)", type="log"),
-        yaxis=dict(title="# clusters", rangemode="tozero"))
+        xaxis=dict(title="Delaunay simplices (sorted, percentile)"),
+        yaxis=dict(title="circumradius", type="log"))
     return fig

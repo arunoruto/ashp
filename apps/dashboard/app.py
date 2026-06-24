@@ -22,10 +22,10 @@ for _p in (_HERE, _HERE.parents[1] / "src"):
 
 import numpy as np  # noqa: E402
 
-from ashp import (alphashape, cluster, cluster_persistence,  # noqa: E402
-                  optimizealpha, select_alpha)
-from plotting import (cluster_figure, make_figure, make_figure_3d,  # noqa: E402
-                      persistence_figure, sample_points)
+from ashp import (alphashape, alpha_knee, optimizealpha,  # noqa: E402
+                  select_alpha)
+from plotting import (knee_figure, make_figure, make_figure_3d,  # noqa: E402
+                      sample_points)
 
 DATASETS_2D = ["two moons", "spiral", "annulus", "uniform"]
 DATASETS_3D = ["ball (3D)", "torus (3D)", "blobs (3D)"]
@@ -44,7 +44,7 @@ with st.sidebar:
     seed = st.number_input("Random seed", min_value=0, max_value=9999, value=0)
 
     st.header("Alpha")
-    modes = ["Quantile (robust)", "Manual"]
+    modes = ["Knee (auto)", "Quantile (robust)", "Manual"]
     if not is_3d:
         modes.append("Optimize (cover all)")
     mode = st.radio("Selection", modes, index=0)
@@ -54,13 +54,17 @@ with st.sidebar:
         alpha_input = st.slider(
             "alpha", 0.0, 30.0, 6.0 if is_3d else 4.0, step=0.1,
             help="Larger alpha = tighter shape. Note the useful range shifts "
-                 "with the point count — see the 'Quantile' mode.")
+                 "with the point count — see the 'Knee' / 'Quantile' modes.")
     elif mode == "Quantile (robust)":
         q_input = st.slider(
             "q — fraction of simplices kept", 0.50, 1.0, 0.90, step=0.01,
             help="select_alpha: a rank statistic, so the shape stays stable as "
                  "you change the point count. 1.0 = convex hull; lower carves "
                  "tighter.")
+    elif mode == "Knee (auto)":
+        st.caption("alpha_knee: cuts the long 'bridge' edges automatically at "
+                   "the knee of the circumradius distribution. See the "
+                   "diagnostic below the shape.")
 
 
 @st.cache_data(show_spinner=False)
@@ -68,11 +72,16 @@ def compute(dataset: str, n: int, seed: int, mode: str, alpha: float, q: float):
     """Sample points and build the alpha shape, cached on the inputs so that
     Streamlit reruns (e.g. unrelated widget changes) don't recompute it.
 
-    Returns ``(points, payload, used_alpha)`` where ``payload`` is either
+    Returns ``(points, payload, used_alpha, knee)`` where ``payload`` is either
     ``("2d", geometry)`` or ``("3d", vertices, faces)`` (arrays, so the result
-    stays picklable for the cache)."""
+    stays picklable for the cache), and ``knee`` is the AlphaKnee diagnostic
+    when the knee mode is active, else ``None``."""
     points = sample_points(dataset, n, seed)
-    if mode == "Quantile (robust)":
+    knee = None
+    if mode == "Knee (auto)":
+        knee = alpha_knee(points)
+        used = knee.alpha
+    elif mode == "Quantile (robust)":
         used = select_alpha(points, q)
     elif mode == "Optimize (cover all)":
         used = optimizealpha(points, upper=200.0, silent=True)
@@ -83,77 +92,49 @@ def compute(dataset: str, n: int, seed: int, mode: str, alpha: float, q: float):
         faces = np.asarray(mesh.faces)
         if faces.ndim != 2:
             faces = faces.reshape(0, 3)
-        return points, ("3d", np.asarray(mesh.vertices), faces), used
-    return points, ("2d", alphashape(points, used)), used
+        return points, ("3d", np.asarray(mesh.vertices), faces), used, knee
+    return points, ("2d", alphashape(points, used)), used, knee
 
 
-@st.cache_data(show_spinner=False)
-def cluster_data(dataset: str, n: int, seed: int, min_size: int):
-    """Cluster the sampled points and the persistence curve, cached together."""
-    points = sample_points(dataset, n, seed)
-    cp = cluster_persistence(points, min_size=min_size)
-    labels = cluster(points, cp.best_alpha, min_size=min_size)
-    return points, labels, cp.best_alpha, cp.best_k, cp.alpha, cp.n_clusters
+start = time.perf_counter()
+spinner = ("Optimizing alpha…" if mode == "Optimize (cover all)"
+           else "Computing alpha shape…")
+with st.spinner(spinner):
+    points, payload, used_alpha, knee = compute(
+        dataset, n, int(seed), mode, alpha_input, q_input)
+elapsed = time.perf_counter() - start
 
+if payload[0] == "3d":
+    _, vertices, faces = payload
+    st.plotly_chart(make_figure_3d(points, vertices, faces), width="stretch")
+else:
+    _, geom = payload
+    st.plotly_chart(make_figure(points, geom), width="stretch")
 
-tab_shape, tab_cluster = st.tabs(["Alpha shape", "Clustering"])
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Points", len(points))
+c2.metric("Alpha used", f"{used_alpha:.2f}")
+if payload[0] == "3d":
+    c3.metric("Faces", len(faces))
+    c4.metric("Compute", f"{elapsed * 1e3:.0f} ms")
+    if len(faces) == 0:
+        st.info("No surface at this alpha — it is too high. Lower the slider.")
+else:
+    c3.metric("Geometry", geom.geom_type)
+    c4.metric("Compute", f"{elapsed * 1e3:.0f} ms")
+    st.caption(f"Resulting area: {getattr(geom, 'area', 0.0):.3f}")
+    if mode == "Optimize (cover all)" and used_alpha == 0.0:
+        st.info(
+            "The optimizer returned alpha = 0 (convex hull). That happens when "
+            "no single alpha wraps every point into one polygon — common for "
+            "uniform clouds. Try the *Knee* mode, or the *two moons* / "
+            "*spiral* datasets.")
 
-with tab_shape:
-    start = time.perf_counter()
-    spinner = ("Optimizing alpha…" if mode == "Optimize (cover all)"
-               else "Computing alpha shape…")
-    with st.spinner(spinner):
-        points, payload, used_alpha = compute(
-            dataset, n, int(seed), mode, alpha_input, q_input)
-    elapsed = time.perf_counter() - start
-
-    if payload[0] == "3d":
-        _, vertices, faces = payload
-        st.plotly_chart(make_figure_3d(points, vertices, faces),
-                        width="stretch")
-    else:
-        _, geom = payload
-        st.plotly_chart(make_figure(points, geom), width="stretch")
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Points", len(points))
-    c2.metric("Alpha used", f"{used_alpha:.2f}")
-    if payload[0] == "3d":
-        c3.metric("Faces", len(faces))
-        c4.metric("Compute", f"{elapsed * 1e3:.0f} ms")
-        if len(faces) == 0:
-            st.info("No surface at this alpha — it is too high. Lower the "
-                    "slider.")
-    else:
-        c3.metric("Geometry", geom.geom_type)
-        c4.metric("Compute", f"{elapsed * 1e3:.0f} ms")
-        st.caption(f"Resulting area: {getattr(geom, 'area', 0.0):.3f}")
-        if mode == "Optimize (cover all)" and used_alpha == 0.0:
-            st.info(
-                "The optimizer returned alpha = 0 (convex hull). That happens "
-                "when no single alpha wraps every point into one polygon — "
-                "common for uniform clouds. Try the *Quantile* mode, or the "
-                "*two moons* / *spiral* datasets.")
-
-with tab_cluster:
+if knee is not None:
+    st.subheader("Why this alpha?")
     st.caption(
-        "Clusters are the connected components of the alpha complex. The "
-        "persistence curve picks the most stable scale automatically — read it "
-        "like a k-means elbow plot.")
-    min_size = st.slider("Minimum cluster size", 2, 60, 10,
-                         help="Components smaller than this are treated as "
-                              "noise (grey).")
-    points_c, labels, best_alpha, best_k, curve_a, curve_k = cluster_data(
-        dataset, n, int(seed), min_size)
-
-    left, right = st.columns(2)
-    left.plotly_chart(
-        persistence_figure(curve_a, curve_k, best_alpha, best_k),
-        width="stretch")
-    right.plotly_chart(cluster_figure(points_c, labels), width="stretch")
-
-    found = len(set(labels[labels >= 0].tolist()))
-    d1, d2, d3 = st.columns(3)
-    d1.metric("Suggested k", best_k)
-    d2.metric("Clusters shown", found)
-    d3.metric("Noise points", int((labels == -1).sum()))
+        "Delaunay simplices sorted by circumradius. The bulk on the left are "
+        "homogeneous local connections; the steep tail on the right is the long "
+        "edges that bridge gaps. The knee (dashed) is the cutoff — everything "
+        "above it is dropped.")
+    st.plotly_chart(knee_figure(knee), width="stretch")
