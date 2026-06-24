@@ -62,4 +62,9 @@ log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 major_on_zero = false
-branch = "main"
+build_command = "uv build"
+commit_parser = "conventional"
+commit_message = "chore(release): {version} [skip ci]"
+
+[tool.semantic_release.branches.main]
+match = "main"
