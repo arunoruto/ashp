@@ -1,4 +1,4 @@
-__all__ = ['optimizealpha']
+__all__ = ['optimizealpha', 'select_alpha']
 import sys
 import warnings
 import shapely
@@ -41,6 +41,51 @@ def _testalpha(points: Union[List[Tuple[float]], np.ndarray], alpha: float):
             trimesh.proximity.signed_distance(polygon, list(points)) >= 0)
     else:
         return False
+
+
+def select_alpha(points: Union[List[Tuple[float]], np.ndarray],
+                 q: float = 0.9) -> float:
+    """
+    Pick an alpha from a quantile of the Delaunay circumradii.
+
+    A fast, outlier-robust alternative to :func:`optimizealpha`.  It keeps the
+    fraction ``q`` of simplices with the smallest circumradius and drops the
+    largest ``1 - q`` (the slivers that bridge gaps), returning the matching
+    ``alpha = 1 / circumradius`` threshold.
+
+    Because ``q`` is a rank statistic, the *shape* it produces stays consistent
+    as the number of points changes, even though the alpha value itself scales
+    with point density.  ``q = 1`` keeps every simplex and returns ``0.0`` (the
+    convex hull); smaller ``q`` carves the shape more tightly.
+
+    Unlike :func:`optimizealpha` this needs a single triangulation and no
+    bisection, and it works the same way in 2-D and 3-D.
+
+    Args:
+        points: an iterable container of points (2-D or 3-D).
+        q: fraction of simplices to keep, in ``[0, 1]``.
+
+    Returns:
+        float: an alpha value, or ``0.0`` (convex hull) if it cannot be found.
+    """
+    if not 0.0 <= q <= 1.0:
+        raise ValueError("q must be in [0, 1]")
+    if q >= 1.0:
+        return 0.0  # keep every simplex -> convex hull
+
+    if USE_GP and isinstance(points, geopandas.GeoDataFrame):
+        points = points['geometry']
+    if USE_GP and isinstance(points, geopandas.geoseries.GeoSeries):
+        points = np.array([point.coords[0] for point in points])
+
+    from .alphashape import _delaunay_circumradii
+    _, _, radii = _delaunay_circumradii(points)
+    radii = radii[np.isfinite(radii)]
+    if radii.size == 0:
+        return 0.0
+
+    threshold = float(np.quantile(radii, q))
+    return 1.0 / threshold if threshold > 0.0 else 0.0
 
 
 def optimizealpha(points: Union[List[Tuple[float]], np.ndarray],

@@ -18,9 +18,15 @@ the venv and falls back to a system/nix-provided one that cannot import `ashp`
 dashboard` once also works, after which a plain `uv run streamlit ...` is fine.
 
 Pick a dataset — 2-D (two moons, spiral, annulus, uniform) or 3-D (ball, torus,
-blobs) — set the number of points, and either drag the `alpha` slider or let the
-optimizer choose it. 3-D datasets render the alpha-shape surface mesh with
-Plotly; alpha optimization is 2-D only.
+blobs) — set the number of points, and choose how alpha is selected:
+
+- **Quantile (robust)** — `select_alpha(points, q)`; a rank statistic, so the
+  shape stays stable as you change the point count (the default).
+- **Manual** — set alpha directly (its useful range shifts with point count).
+- **Optimize (cover all)** — `optimizealpha`; tightest single polygon covering
+  every point (2-D only).
+
+3-D datasets render the alpha-shape surface mesh with Plotly.
 
 ## Files
 

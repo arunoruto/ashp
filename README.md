@@ -137,7 +137,7 @@ uv run pytest          # 13 tests
 ## Usage
 
 ```python
-from ashp import alphashape, optimizealpha
+from ashp import alphashape, optimizealpha, select_alpha
 
 points = [(0., 0.), (0., 1.), (1., 1.), (1., 0.),
           (0.5, 0.25), (0.5, 0.75), (0.25, 0.5), (0.75, 0.5)]
@@ -145,7 +145,13 @@ points = [(0., 0.), (0., 1.), (1., 1.), (1., 0.),
 # Fixed alpha (larger = tighter / more concave; 0 = convex hull):
 shape = alphashape(points, alpha=2.0)        # -> shapely geometry
 
-# Or let the solver pick the tightest alpha that keeps every point:
+# Pick alpha from a circumradius quantile — fast, outlier-robust, and the
+# resulting shape stays stable as the point count changes (q in [0, 1];
+# 1 = convex hull, lower carves tighter). Works in 2-D and 3-D:
+shape = alphashape(points, select_alpha(points, q=0.9))
+
+# Or solve for the tightest alpha that keeps every point in one polygon.
+# Note: this is a bottleneck statistic — sensitive to outliers and density:
 best = optimizealpha(points)
 shape = alphashape(points, best)
 ```
