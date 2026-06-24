@@ -5,6 +5,7 @@
 *** https://github.com/othneildrew/Best-README-Template
 -->
 
+[![CI][ci-shield]][ci-url]
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -280,6 +281,8 @@ Project Link: [https://github.com/arunoruto/ashp](https://github.com/arunoruto/a
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- MARKDOWN LINKS & IMAGES -->
+[ci-shield]: https://img.shields.io/github/actions/workflow/status/arunoruto/ashp/release.yml?branch=main&style=for-the-badge&label=ci
+[ci-url]: https://github.com/arunoruto/ashp/actions/workflows/release.yml
 [contributors-shield]: https://img.shields.io/github/contributors/arunoruto/ashp.svg?style=for-the-badge
 [contributors-url]: https://github.com/arunoruto/ashp/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/arunoruto/ashp.svg?style=for-the-badge
