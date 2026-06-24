@@ -10,6 +10,7 @@ sweep so a stable scale can be read off like a k-means elbow plot.
 """
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import List, Tuple, Union
 
@@ -17,7 +18,8 @@ import numpy as np
 
 from .alphashape import _delaunay_circumradii
 
-__all__ = ['cluster', 'cluster_persistence', 'ClusterPersistence']
+__all__ = ['cluster', 'cluster_persistence', 'ClusterPersistence',
+           'alpha_sweep', 'AlphaSweep']
 
 
 class _UnionFind:
@@ -188,3 +190,89 @@ def cluster_persistence(points: Union[List[Tuple[float]], np.ndarray],
     k_curve = k_arr[positive][::-1]
     return ClusterPersistence(alpha=alpha_curve, n_clusters=k_curve,
                               best_alpha=best_alpha, best_k=int(best_k))
+
+
+@dataclass
+class AlphaSweep:
+    """Result of :func:`alpha_sweep` (all arrays aligned and ascending in alpha).
+
+    Attributes:
+        alpha: the sweep of alpha values (``1 / radius`` threshold).
+        edge_std: standard deviation of the kept Delaunay edge lengths.
+        edge_cv: their coefficient of variation (``std / mean``) — dimensionless,
+            so it is comparable across point counts and scales.
+        n_components: number of connected components of the kept edges.
+        n_edges: number of kept edges.
+    """
+    alpha: np.ndarray
+    edge_std: np.ndarray
+    edge_cv: np.ndarray
+    n_components: np.ndarray
+    n_edges: np.ndarray
+
+
+def alpha_sweep(points: Union[List[Tuple[float]], np.ndarray],
+                n_steps: int = 80) -> AlphaSweep:
+    """
+    Track edge-length spread and connectivity as alpha sweeps.
+
+    The Delaunay graph is fixed; alpha only chooses which edges survive (an edge
+    is kept while its birth radius — the smallest circumradius of an incident
+    simplex — is below ``1/alpha``).  So the whole sweep is computed once from
+    the sorted edges via prefix sums (for the length statistics) and a single
+    incremental union-find pass (for connectivity), with no per-alpha alpha-shape
+    recomputation.
+
+    Args:
+        points: an iterable container of points (2-D or 3-D).
+        n_steps: number of alpha samples.
+
+    Returns:
+        An :class:`AlphaSweep` with the metrics as functions of alpha.
+    """
+    coords, simplices, radii = _delaunay_circumradii(points)
+    n = coords.shape[0]
+    finite = np.isfinite(radii)
+    simplices, radii = simplices[finite], radii[finite]
+
+    # Every simplex facet down to its edges, tagged with the simplex circumradius.
+    pairs = list(itertools.combinations(range(simplices.shape[1]), 2))
+    raw_edges = np.sort(np.vstack([simplices[:, p] for p in pairs]), axis=1)
+    raw_birth = np.tile(radii, len(pairs))
+    edges, inverse = np.unique(raw_edges, axis=0, return_inverse=True)
+    birth = np.full(edges.shape[0], np.inf)
+    np.minimum.at(birth, inverse, raw_birth)      # edge birth = min incident radius
+    length = np.linalg.norm(coords[edges[:, 0]] - coords[edges[:, 1]], axis=1)
+
+    order = np.argsort(birth, kind="mergesort")
+    edges, birth, length = edges[order], birth[order], length[order]
+    m = length.size
+    empty = np.zeros(0)
+    if m == 0:
+        return AlphaSweep(empty, empty, empty, empty.astype(int),
+                          empty.astype(int))
+
+    # Prefix sums of length (ordered by birth) -> O(1) stats for any threshold.
+    csum = np.concatenate(([0.0], np.cumsum(length)))
+    csum2 = np.concatenate(([0.0], np.cumsum(length * length)))
+
+    # Components after adding the first k edges (increasing birth).
+    uf = _UnionFind(n)
+    comp_after = np.empty(m + 1, dtype=np.int64)
+    comp_after[0] = n
+    comp = n
+    for i in range(m):
+        comp += uf.union(int(edges[i, 0]), int(edges[i, 1]), 1)
+        comp_after[i + 1] = comp
+
+    alpha = np.geomspace(1.0 / np.percentile(birth, 99.5),
+                         1.0 / np.percentile(birth, 2.0), n_steps)
+    k = np.clip(np.searchsorted(birth, 1.0 / alpha, side="right"), 0, m)
+
+    counts = np.maximum(k, 1)
+    mean = csum[k] / counts
+    var = np.clip(csum2[k] / counts - mean ** 2, 0.0, None)
+    std = np.where(k > 0, np.sqrt(var), 0.0)
+    cv = np.where(mean > 0, std / mean, 0.0)
+    return AlphaSweep(alpha=alpha, edge_std=std, edge_cv=cv,
+                      n_components=comp_after[k], n_edges=k)

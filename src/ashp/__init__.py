@@ -10,7 +10,9 @@ from .alphashape import alphasimplices
 from .optimizealpha import optimizealpha
 from .optimizealpha import select_alpha, alpha_knee, AlphaKnee
 from .cluster import cluster, cluster_persistence, ClusterPersistence
+from .cluster import alpha_sweep, AlphaSweep
 from ._version import __version__  # noqa: F401
 __all__ = ['alphashape', 'optimizealpha', 'select_alpha', 'alpha_knee',
            'AlphaKnee', 'circumradius', 'circumcenter', 'alphasimplices',
-           'cluster', 'cluster_persistence', 'ClusterPersistence']
+           'cluster', 'cluster_persistence', 'ClusterPersistence',
+           'alpha_sweep', 'AlphaSweep']

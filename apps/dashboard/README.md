@@ -31,6 +31,12 @@ blobs) — set the number of points, and choose how alpha is selected:
 
 3-D datasets render the alpha-shape surface mesh with Plotly.
 
+Below the shape, the **Metrics vs alpha** panel sweeps alpha and plots the
+spread (std and coefficient of variation) of the kept Delaunay edge lengths and
+the number of connected components. Since the triangulation is fixed and alpha
+only drops edges, the whole sweep is one sort + prefix sums + a single
+union-find pass (no per-alpha recomputation), so it updates instantly.
+
 ## Files
 
 | File | Purpose |

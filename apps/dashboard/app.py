@@ -22,10 +22,10 @@ for _p in (_HERE, _HERE.parents[1] / "src"):
 
 import numpy as np  # noqa: E402
 
-from ashp import (alphashape, alpha_knee, optimizealpha,  # noqa: E402
-                  select_alpha)
+from ashp import (alphashape, alpha_knee, alpha_sweep,  # noqa: E402
+                  optimizealpha, select_alpha)
 from plotting import (knee_figure, make_figure, make_figure_3d,  # noqa: E402
-                      sample_points)
+                      sample_points, sweep_figure)
 
 DATASETS_2D = ["two moons", "spiral", "annulus", "uniform"]
 DATASETS_3D = ["ball (3D)", "torus (3D)", "blobs (3D)"]
@@ -138,3 +138,22 @@ if knee is not None:
         "edges that bridge gaps. The knee (dashed) is the cutoff — everything "
         "above it is dropped.")
     st.plotly_chart(knee_figure(knee), width="stretch")
+
+
+@st.cache_data(show_spinner=False)
+def sweep_data(dataset: str, n: int, seed: int):
+    """Edge-length and connectivity metrics across alpha (cheap: one sort +
+    prefix sums + a single union-find pass, no per-alpha alpha shapes)."""
+    return alpha_sweep(sample_points(dataset, n, seed))
+
+
+st.subheader("Metrics vs alpha")
+st.caption(
+    "The Delaunay graph is fixed — alpha only drops edges. As alpha rises, the "
+    "spread (std) and **coefficient of variation** (CV = std/mean) of the kept "
+    "edge lengths fall as the long bridges are removed; the number of connected "
+    "**components** rises as the shape fragments. A good alpha sits where CV has "
+    "levelled off but the shape hasn't shattered yet. The dashed line is the "
+    "alpha in use.")
+st.plotly_chart(sweep_figure(sweep_data(dataset, n, int(seed)), used_alpha),
+                width="stretch")

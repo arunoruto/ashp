@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from ashp import cluster, cluster_persistence
+from ashp import alpha_sweep, cluster, cluster_persistence
 
 
 def _two_blobs(seed=0, n=120, gap=6.0):
@@ -41,3 +41,13 @@ def test_cluster_marks_isolated_point_as_noise():
     labels = cluster(pts, alpha=5.0, min_size=5)
     assert labels[-1] == -1            # the far point is noise
     assert (labels >= 0).any()          # the blob is still a cluster
+
+
+def test_alpha_sweep_metrics_are_monotonic():
+    pts, _ = _two_blobs()
+    sw = alpha_sweep(pts, n_steps=60)
+    assert sw.alpha.shape == sw.edge_std.shape == sw.n_components.shape
+    assert np.all(np.diff(sw.alpha) > 0)              # ascending alpha
+    assert np.all(np.diff(sw.n_components) >= 0)       # only fragments as alpha grows
+    assert np.all(np.diff(sw.n_edges) <= 0)            # fewer edges as alpha grows
+    assert np.all(sw.edge_std >= 0) and np.all(sw.edge_cv >= 0)

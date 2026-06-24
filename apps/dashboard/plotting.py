@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 POINT_COLOR = "rgb(55, 65, 80)"
 SHAPE_LINE = "rgb(31, 119, 180)"
@@ -220,4 +221,43 @@ def knee_figure(knee) -> go.Figure:
         margin=dict(l=10, r=10, t=30, b=10),
         xaxis=dict(title="Delaunay simplices (sorted, percentile)"),
         yaxis=dict(title="circumradius", type="log"))
+    return fig
+
+
+def sweep_figure(sweep, selected_alpha=None) -> go.Figure:
+    """
+    Two stacked panels vs alpha (``sweep`` is an :class:`ashp.AlphaSweep`):
+    the spread of kept edge lengths (std + coefficient of variation), and the
+    number of connected pieces.  ``selected_alpha`` is marked on both.
+    """
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.09,
+        specs=[[{"secondary_y": True}], [{"secondary_y": False}]],
+        subplot_titles=("edge-length spread", "connectivity"))
+
+    fig.add_trace(go.Scatter(
+        x=sweep.alpha, y=sweep.edge_std, name="std",
+        line=dict(color=SHAPE_LINE, width=2)), row=1, col=1, secondary_y=False)
+    fig.add_trace(go.Scatter(
+        x=sweep.alpha, y=sweep.edge_cv, name="CV = std/mean",
+        line=dict(color="#ff7f0e", width=2)), row=1, col=1, secondary_y=True)
+    fig.add_trace(go.Scatter(
+        x=sweep.alpha, y=sweep.n_components, name="# components",
+        line=dict(color="#2ca02c", width=2)), row=2, col=1)
+
+    if selected_alpha:
+        fig.add_vline(x=selected_alpha, line=dict(color="#d62728", dash="dash"),
+                      row=1, col=1)
+        fig.add_vline(x=selected_alpha, line=dict(color="#d62728", dash="dash"),
+                      row=2, col=1)
+
+    fig.update_xaxes(type="log", row=1, col=1)
+    fig.update_xaxes(type="log", title="alpha (log scale)", row=2, col=1)
+    fig.update_yaxes(title="std", row=1, col=1, secondary_y=False)
+    fig.update_yaxes(title="CV", row=1, col=1, secondary_y=True)
+    fig.update_yaxes(title="# components", type="log", row=2, col=1)
+    fig.update_layout(
+        template="simple_white", height=460,
+        margin=dict(l=10, r=10, t=30, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, x=0))
     return fig
